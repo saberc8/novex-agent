@@ -1,0 +1,187 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f6f7fb;
+  color: #1f2430;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  background: #f6f7fb;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.app-nav {
+  background: #ffffff;
+  border-bottom: 1px solid #eef0f4;
+  flex: 0 0 auto;
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.app-tabbar {
+  flex: 0 0 auto;
+  background: #ffffff;
+  border-top: 1px solid #eef0f4;
+}
+
+.center-state {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  color: #697386;
+  font-size: 15px;
+}
+
+.auth-screen,
+.home-screen,
+.mine-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-heading {
+  padding: 16px 2px 8px;
+}
+
+.auth-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #1677ff;
+  color: #ffffff;
+  font-size: 25px;
+  margin-bottom: 12px;
+}
+
+.auth-heading h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 34px;
+  font-weight: 700;
+}
+
+.auth-heading p {
+  margin: 4px 0 0;
+  color: #697386;
+  font-size: 14px;
+}
+
+.summary-card,
+.profile-card {
+  border-radius: 8px;
+}
+
+.summary-title {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+.summary-copy,
+.feature-desc,
+.profile-phone {
+  color: #697386;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.feature-card {
+  border-radius: 8px;
+}
+
+.feature-icon {
+  color: #1677ff;
+  font-size: 24px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.feature-title {
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 650;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.profile-avatar {
+  --size: 58px;
+  --border-radius: 8px;
+  background: #1677ff;
+}
+
+.profile-meta {
+  min-width: 0;
+}
+
+.profile-name {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.account-card {
+  border-radius: 8px;
+}
+
+.account-line {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #697386;
+  font-size: 14px;
+}
+
+.account-line + .account-line {
+  border-top: 1px solid #eef0f4;
+}
+
+.account-line strong {
+  color: #1f2430;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+@media (min-width: 420px) {
+  .feature-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
