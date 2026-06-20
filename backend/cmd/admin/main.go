@@ -79,7 +79,7 @@ func main() {
 	r := gin.Default()
 	allowedOrigins := parseAllowedOrigins(getenvDefault(
 		"HTTP_CORS_ALLOWED_ORIGINS",
-		"http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174",
+		"http://localhost:8202,http://127.0.0.1:8202,http://localhost:8203,http://127.0.0.1:8203",
 	))
 
 	// 全局 CORS（开发阶段允许前端本地调试）
@@ -130,7 +130,7 @@ func main() {
 	r.Static("/file", fileRoot)
 
 	// Swagger 接口文档
-	// 访问地址示例：http://localhost:4398/swagger/index.html
+	// 访问地址示例：http://localhost:8201/swagger/index.html
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	clientProtected := r.Group("")
@@ -195,7 +195,7 @@ func main() {
 	logHandler.RegisterLogRoutes(r)
 
 	// 5. 启动 HTTP 服务
-	port := getenvDefault("HTTP_PORT", "4398")
+	port := getenvDefault("HTTP_PORT", "8201")
 	// 在启动前设置 swagger 文档的 Host，便于在 UI 中调试。
 	docs.SwaggerInfo.Host = "localhost:" + port
 	if err := r.Run(":" + port); err != nil {

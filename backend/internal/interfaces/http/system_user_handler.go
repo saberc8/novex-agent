@@ -165,6 +165,15 @@ func (h *SystemUserHandler) ListUserPage(c *gin.Context) {
 		args = append(args, deptID)
 		argPos++
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
 
 	countSQL := "SELECT COUNT(*) FROM sys_user AS u " + where
 	var total int64
@@ -275,60 +284,47 @@ func (h *SystemUserHandler) ListAllUser(c *gin.Context) {
 		}
 	}
 
-	var rows *sql.Rows
-	var err error
+	where := "WHERE 1=1"
+	args := []any{}
+	argPos := 1
 	if len(ids) > 0 {
-		rows, err = h.db.QueryContext(
-			c.Request.Context(),
-			`SELECT u.id,
-       u.username,
-       u.nickname,
-       COALESCE(u.avatar, ''),
-       u.gender,
-       COALESCE(u.email, ''),
-       COALESCE(u.phone, ''),
-       COALESCE(u.description, ''),
-       u.status,
-       u.is_system,
-       u.dept_id,
-       COALESCE(d.name, ''),
-       u.create_time,
-       COALESCE(cu.nickname, ''),
-       u.update_time,
-       COALESCE(uu.nickname, '')
-FROM sys_user AS u
-LEFT JOIN sys_dept AS d ON d.id = u.dept_id
-LEFT JOIN sys_user AS cu ON cu.id = u.create_user
-LEFT JOIN sys_user AS uu ON uu.id = u.update_user
-WHERE u.id = ANY($1::bigint[])`,
-			pqInt64Array(ids),
-		)
-	} else {
-		rows, err = h.db.QueryContext(
-			c.Request.Context(),
-			`SELECT u.id,
-       u.username,
-       u.nickname,
-       COALESCE(u.avatar, ''),
-       u.gender,
-       COALESCE(u.email, ''),
-       COALESCE(u.phone, ''),
-       COALESCE(u.description, ''),
-       u.status,
-       u.is_system,
-       u.dept_id,
-       COALESCE(d.name, ''),
-       u.create_time,
-       COALESCE(cu.nickname, ''),
-       u.update_time,
-       COALESCE(uu.nickname, '')
-FROM sys_user AS u
-LEFT JOIN sys_dept AS d ON d.id = u.dept_id
-LEFT JOIN sys_user AS cu ON cu.id = u.create_user
-LEFT JOIN sys_user AS uu ON uu.id = u.update_user
-ORDER BY u.id DESC`,
-		)
+		where += fmt.Sprintf(" AND u.id = ANY($%d::bigint[])", argPos)
+		args = append(args, pqInt64Array(ids))
+		argPos++
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
+
+	query := fmt.Sprintf(`SELECT u.id,
+       u.username,
+       u.nickname,
+       COALESCE(u.avatar, ''),
+       u.gender,
+       COALESCE(u.email, ''),
+       COALESCE(u.phone, ''),
+       COALESCE(u.description, ''),
+       u.status,
+       u.is_system,
+       u.dept_id,
+       COALESCE(d.name, ''),
+       u.create_time,
+       COALESCE(cu.nickname, ''),
+       u.update_time,
+       COALESCE(uu.nickname, '')
+FROM sys_user AS u
+LEFT JOIN sys_dept AS d ON d.id = u.dept_id
+LEFT JOIN sys_user AS cu ON cu.id = u.create_user
+LEFT JOIN sys_user AS uu ON uu.id = u.update_user
+%s
+ORDER BY u.id DESC`, where)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		Fail(c, "500", "查询用户失败")
 		return
@@ -444,7 +440,20 @@ func (h *SystemUserHandler) GetUserDetail(c *gin.Context) {
 		return
 	}
 
-	const query = `
+	where := "WHERE u.id = $1"
+	args := []any{idVal}
+	argPos := 2
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
+
+	query := fmt.Sprintf(`
 SELECT u.id,
        u.username,
        u.nickname,
@@ -466,8 +475,8 @@ FROM sys_user AS u
 LEFT JOIN sys_dept AS d ON d.id = u.dept_id
 LEFT JOIN sys_user AS cu ON cu.id = u.create_user
 LEFT JOIN sys_user AS uu ON uu.id = u.update_user
-WHERE u.id = $1;
-`
+%s;
+`, where)
 	var (
 		u        UserDetailResp
 		pwdReset sql.NullTime
@@ -476,7 +485,7 @@ WHERE u.id = $1;
 		updateAt sql.NullTime
 		updateBy string
 	)
-	err = h.db.QueryRowContext(c.Request.Context(), query, idVal).
+	err = h.db.QueryRowContext(c.Request.Context(), query, args...).
 		Scan(
 			&u.ID,
 			&u.Username,
@@ -516,10 +525,11 @@ WHERE u.id = $1;
 	}
 
 	// 角色信息
-	h.fillUserRoles(c, []UserResp{u.UserResp})
-	if len(u.UserResp.RoleIDs) > 0 || len(u.UserResp.RoleNames) > 0 {
-		u.RoleIDs = u.UserResp.RoleIDs
-		u.RoleNames = u.UserResp.RoleNames
+	roleUsers := []UserResp{u.UserResp}
+	h.fillUserRoles(c, roleUsers)
+	if len(roleUsers) > 0 {
+		u.RoleIDs = roleUsers[0].RoleIDs
+		u.RoleNames = roleUsers[0].RoleNames
 	}
 
 	OK(c, u)
@@ -552,6 +562,20 @@ func (h *SystemUserHandler) CreateUser(c *gin.Context) {
 	}
 	if strings.TrimSpace(req.Password) == "" {
 		Fail(c, "400", "密码不能为空")
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canUseDept, err := principalCanUseDept(c.Request.Context(), h.db, principal, req.DeptID)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canUseDept {
+		Fail(c, "403", "没有该部门的数据权限")
 		return
 	}
 
@@ -680,6 +704,29 @@ func (h *SystemUserHandler) UpdateUser(c *gin.Context) {
 	if req.Status == 0 {
 		req.Status = 1
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canAccessUser, err := principalCanAccessUser(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canAccessUser {
+		Fail(c, "403", "没有该用户的数据权限")
+		return
+	}
+	canUseDept, err := principalCanUseDept(c.Request.Context(), h.db, principal, req.DeptID)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canUseDept {
+		Fail(c, "403", "没有该部门的数据权限")
+		return
+	}
 
 	tx, err := h.db.BeginTx(c.Request.Context(), nil)
 	if err != nil {
@@ -748,6 +795,20 @@ func (h *SystemUserHandler) DeleteUser(c *gin.Context) {
 			return
 		}
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canAccessUsers, err := principalCanAccessUsers(c.Request.Context(), h.db, principal, req.IDs)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canAccessUsers {
+		Fail(c, "403", "没有该用户的数据权限")
+		return
+	}
 
 	tx, err := h.db.BeginTx(c.Request.Context(), nil)
 	if err != nil {
@@ -798,6 +859,20 @@ func (h *SystemUserHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 	if !ensureSystemUserMutable(c, h.db, idVal, "重置密码") {
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canAccessUser, err := principalCanAccessUser(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canAccessUser {
+		Fail(c, "403", "没有该用户的数据权限")
 		return
 	}
 
@@ -874,6 +949,20 @@ func (h *SystemUserHandler) UpdateUserRole(c *gin.Context) {
 	if !ensureSystemUserMutable(c, h.db, idVal, "分配角色") {
 		return
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canAccessUser, err := principalCanAccessUser(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canAccessUser {
+		Fail(c, "403", "没有该用户的数据权限")
+		return
+	}
 
 	var req userRoleUpdateReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -916,10 +1005,20 @@ ON CONFLICT (user_id, role_id) DO NOTHING;
 // ExportUser handles GET /system/user/export.
 // It returns a very simple CSV file with basic user information.
 func (h *SystemUserHandler) ExportUser(c *gin.Context) {
-	rows, err := h.db.QueryContext(
-		c.Request.Context(),
-		`SELECT username, nickname, gender, COALESCE(email,''), COALESCE(phone,'') FROM sys_user ORDER BY id`,
-	)
+	where := "WHERE 1=1"
+	args := []any{}
+	argPos := 1
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
+	query := fmt.Sprintf(`SELECT username, nickname, gender, COALESCE(email,''), COALESCE(phone,'') FROM sys_user AS u %s ORDER BY id`, where)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		Fail(c, "500", "导出用户失败")
 		return

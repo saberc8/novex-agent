@@ -2,6 +2,7 @@ package http
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -588,7 +589,20 @@ func (h *RoleHandler) PageRoleUser(c *gin.Context) {
 	}
 	descFilter := strings.TrimSpace(c.Query("description"))
 
-	const query = `
+	where := "WHERE ur.role_id = $1"
+	args := []any{roleID}
+	argPos := 2
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
+
+	query := fmt.Sprintf(`
 SELECT ur.id,
        ur.role_id,
        u.id,
@@ -603,10 +617,10 @@ SELECT ur.id,
 FROM sys_user_role AS ur
 JOIN sys_user AS u ON u.id = ur.user_id
 LEFT JOIN sys_dept AS d ON d.id = u.dept_id
-WHERE ur.role_id = $1
+%s
 ORDER BY ur.id DESC;
-`
-	rows, err := h.db.QueryContext(c.Request.Context(), query, roleID)
+`, where)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		Fail(c, "500", "查询关联用户失败")
 		return
@@ -736,6 +750,25 @@ func (h *RoleHandler) AssignToUsers(c *gin.Context) {
 		Fail(c, "400", "用户ID列表不能为空")
 		return
 	}
+	userIDs = normalizeInt64IDs(userIDs)
+	if len(userIDs) == 0 {
+		Fail(c, "400", "用户ID列表不能为空")
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canAccessUsers, err := principalCanAccessUsers(c.Request.Context(), h.db, principal, userIDs)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canAccessUsers {
+		Fail(c, "403", "没有该用户的数据权限")
+		return
+	}
 
 	tx, err := h.db.BeginTx(c.Request.Context(), nil)
 	if err != nil {
@@ -780,6 +813,25 @@ func (h *RoleHandler) UnassignFromUsers(c *gin.Context) {
 		Fail(c, "400", "用户角色ID列表不能为空")
 		return
 	}
+	ids = normalizeInt64IDs(ids)
+	if len(ids) == 0 {
+		Fail(c, "400", "用户角色ID列表不能为空")
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canAccessRows, err := principalCanAccessUserRoleRows(c.Request.Context(), h.db, principal, ids)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canAccessRows {
+		Fail(c, "403", "没有该用户的数据权限")
+		return
+	}
 
 	if _, err := h.db.ExecContext(c.Request.Context(), `DELETE FROM sys_user_role WHERE id = ANY($1::bigint[])`, pqInt64Array(ids)); err != nil {
 		Fail(c, "500", "取消分配失败")
@@ -796,7 +848,27 @@ func (h *RoleHandler) ListRoleUserIDs(c *gin.Context) {
 		return
 	}
 
-	rows, err := h.db.QueryContext(c.Request.Context(), `SELECT user_id FROM sys_user_role WHERE role_id = $1`, roleID)
+	where := "WHERE ur.role_id = $1"
+	args := []any{roleID}
+	argPos := 2
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
+
+	query := fmt.Sprintf(`
+SELECT ur.user_id
+  FROM sys_user_role AS ur
+  JOIN sys_user AS u ON u.id = ur.user_id
+%s
+ ORDER BY ur.user_id ASC;
+`, where)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		Fail(c, "500", "查询关联用户失败")
 		return

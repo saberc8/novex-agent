@@ -1,8 +1,8 @@
 <template>
   <GiOption :class="{ shadow: props.shadow }">
     <GiOptionItem v-permission="['system:file:update']" label="重命名" @click="onClickItem('rename')"> </GiOptionItem>
-    <GiOptionItem v-permission="['system:file:get']" label="详情" @click="onClickItem('detail')"> </GiOptionItem>
-    <GiOptionItem v-if="data?.type !== 0" v-permission="['system:file:download']" label="下载" @click="onClickItem('download')"></GiOptionItem>
+    <GiOptionItem v-permission="['system:file:list']" label="详情" @click="onClickItem('detail')"> </GiOptionItem>
+    <GiOptionItem v-if="data?.type !== 0" v-permission="['system:file:list']" label="下载" @click="onClickItem('download')"></GiOptionItem>
     <GiOptionItem v-permission="['system:file:delete']" label="删除" @click="onClickItem('delete')"> </GiOptionItem>
   </GiOption>
 </template>

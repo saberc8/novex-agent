@@ -58,7 +58,7 @@ const emit = defineEmits<{
   (e: 'node-click', keys: Array<any>): void
 }>()
 
-const selectedKeys = ref()
+const selectedKeys = ref<Array<string | number>>([])
 // 选中节点
 const select = (keys: Array<any>) => {
   if (selectedKeys.value && selectedKeys.value[0] === keys[0]) {
@@ -80,6 +80,7 @@ const getTreeData = async () => {
     const { data } = await listRole({ sort: ['sort,asc'] })
     dataList.value = mapTree(data, (i) => ({
       ...i,
+      disabled: false,
       popupVisible: false,
       icon: () => {
         return null

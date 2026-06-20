@@ -24,7 +24,7 @@ cd backend
 go run ./cmd/admin
 ```
 
-The backend defaults to port `4398` and reads database/auth settings from
+The backend defaults to port `8201` and reads database/auth settings from
 environment variables such as `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PWD`,
 `DB_NAME`, `AUTH_RSA_PRIVATE_KEY`, and `AUTH_JWT_SECRET`.
 
@@ -34,8 +34,8 @@ does not require building a new Docker image for local development.
 Common backend environment variables:
 
 ```env
-HTTP_PORT=4398
-HTTP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
+HTTP_PORT=8201
+HTTP_CORS_ALLOWED_ORIGINS=http://localhost:8202,http://127.0.0.1:8202,http://localhost:8203,http://127.0.0.1:8203
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=postgres
@@ -59,12 +59,12 @@ COREPACK_ENABLE_AUTO_PIN=0 corepack pnpm@8.15.9 install --ignore-scripts
 pnpm dev
 ```
 
-The frontend defaults to port `5173`. Configure the API endpoint in
+The frontend defaults to port `8202`. Configure the API endpoint in
 `admin/.env.development`, for example:
 
 ```env
-VITE_API_BASE_URL=http://localhost:4398
-VITE_PORT=5173
+VITE_API_BASE_URL=http://localhost:8201
+VITE_PORT=8202
 ```
 
 Default admin client ID:
@@ -81,12 +81,12 @@ COREPACK_ENABLE_AUTO_PIN=0 corepack pnpm@8.15.9 install --ignore-scripts
 pnpm dev
 ```
 
-The H5 client defaults to port `5174` and calls `/client/*` APIs through the
+The H5 client defaults to port `8203` and calls `/client/*` APIs through the
 same backend service.
 
 ```env
-VITE_API_BASE_URL=http://localhost:4398
-VITE_PORT=5174
+VITE_API_BASE_URL=http://localhost:8201
+VITE_PORT=8203
 VITE_CLIENT_ID=h5-client
 ```
 

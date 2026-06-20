@@ -61,6 +61,9 @@ func AutoMigrate(database *sql.DB) error {
 	if err := cleanupLegacyReactInitialization(database); err != nil {
 		return err
 	}
+	if err := cleanupUnmappedFilePermissions(database); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -798,13 +801,6 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1111);
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
                       create_user, create_time)
-SELECT 1112, '详情', 1110, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:file:get', 2, 1, 1, NOW()
-WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1112);
-
-INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
-                      is_external, is_cache, is_hidden, permission, sort, status,
-                      create_user, create_time)
 SELECT 1113, '上传', 1110, 3, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, NULL, 'system:file:upload', 3, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1113);
@@ -822,13 +818,6 @@ INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirec
 SELECT 1115, '删除', 1110, 3, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, NULL, 'system:file:delete', 5, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1115);
-
-INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
-                      is_external, is_cache, is_hidden, permission, sort, status,
-                      create_user, create_time)
-SELECT 1116, '下载', 1110, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:file:download', 6, 1, 1, NOW()
-WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1116);
 
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
@@ -1362,6 +1351,28 @@ WHERE NOT EXISTS (
 	return nil
 }
 
+func cleanupUnmappedFilePermissions(db *sql.DB) error {
+	const stalePermissions = `'system:file:get', 'system:file:download'`
+	const deleteRoleMenus = `
+DELETE FROM sys_role_menu AS rm
+USING sys_menu AS m
+WHERE rm.menu_id = m.id
+  AND m.permission IN (` + stalePermissions + `);
+`
+	if _, err := db.Exec(deleteRoleMenus); err != nil {
+		return err
+	}
+
+	const deleteMenus = `
+DELETE FROM sys_menu
+WHERE permission IN (` + stalePermissions + `);
+`
+	if _, err := db.Exec(deleteMenus); err != nil {
+		return err
+	}
+	return nil
+}
+
 func ensureSysRoleDept(db *sql.DB) error {
 	const checkTable = `SELECT to_regclass('public.sys_role_dept');`
 	var tableName sql.NullString
@@ -1465,7 +1476,8 @@ CREATE INDEX IF NOT EXISTS idx_dict_update_user ON sys_dict (update_user);
 	}
 
 	// 同步 Java 版 main_data.sql 中的默认字典：
-	// notice_type（公告分类）、client_type（客户端类型）、auth_type_enum（认证类型）、storage_type_enum（存储类型）。
+	// notice_type（公告分类）、client_type（客户端类型）、auth_type_enum（认证类型）、
+	// storage_type_enum（存储类型）、data_scope_enum（数据权限）。
 	const seed = `
 INSERT INTO sys_dict (id, name, code, description, is_system, create_user, create_time)
 SELECT 1, '公告分类', 'notice_type', NULL, TRUE, 1, NOW()
@@ -1482,6 +1494,10 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE id = 3 OR code = 'auth_type_enum'
 INSERT INTO sys_dict (id, name, code, description, is_system, create_user, create_time)
 SELECT 4, '存储类型', 'storage_type_enum', NULL, TRUE, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE id = 4 OR code = 'storage_type_enum');
+
+INSERT INTO sys_dict (id, name, code, description, is_system, create_user, create_time)
+SELECT 5, '数据权限', 'data_scope_enum', NULL, TRUE, 1, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict WHERE id = 5 OR code = 'data_scope_enum');
 `
 	if _, err := db.Exec(seed); err != nil {
 		return err
@@ -1530,6 +1546,7 @@ CREATE INDEX IF NOT EXISTS idx_dict_item_update_user ON sys_dict_item (update_us
 	// - 客户端类型（client_type，dict_id=2）
 	// - 认证类型（auth_type_enum，dict_id=3）
 	// - 存储类型（storage_type_enum，dict_id=4）
+	// - 数据权限（data_scope_enum，dict_id=5）
 	const seedItems = `
 -- 公告分类
 INSERT INTO sys_dict_item (
@@ -1630,6 +1647,47 @@ INSERT INTO sys_dict_item (
 SELECT 11, '对象存储', '2', 'primary', 2, NULL, 1,
        4, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE id = 11);
+
+-- 数据权限
+INSERT INTO sys_dict_item (
+    id, label, value, color, sort, description, status,
+    dict_id, create_user, create_time
+)
+SELECT 13, '全部数据权限', '1', 'primary', 1, NULL, 1,
+       5, 1, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE id = 13 OR (dict_id = 5 AND value = '1'));
+
+INSERT INTO sys_dict_item (
+    id, label, value, color, sort, description, status,
+    dict_id, create_user, create_time
+)
+SELECT 14, '本部门及以下数据权限', '2', 'success', 2, NULL, 1,
+       5, 1, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE id = 14 OR (dict_id = 5 AND value = '2'));
+
+INSERT INTO sys_dict_item (
+    id, label, value, color, sort, description, status,
+    dict_id, create_user, create_time
+)
+SELECT 15, '本部门数据权限', '3', 'warning', 3, NULL, 1,
+       5, 1, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE id = 15 OR (dict_id = 5 AND value = '3'));
+
+INSERT INTO sys_dict_item (
+    id, label, value, color, sort, description, status,
+    dict_id, create_user, create_time
+)
+SELECT 16, '仅本人数据权限', '4', 'danger', 4, NULL, 1,
+       5, 1, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE id = 16 OR (dict_id = 5 AND value = '4'));
+
+INSERT INTO sys_dict_item (
+    id, label, value, color, sort, description, status,
+    dict_id, create_user, create_time
+)
+SELECT 17, '自定义数据权限', '5', 'primary', 5, NULL, 1,
+       5, 1, NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_item WHERE id = 17 OR (dict_id = 5 AND value = '5'));
 `
 	if _, err := db.Exec(seedItems); err != nil {
 		return err

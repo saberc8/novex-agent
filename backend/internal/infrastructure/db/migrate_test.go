@@ -26,6 +26,19 @@ func TestAutoMigrateRemovesLegacyReactInitialization(t *testing.T) {
 	assertExecutedCleanup(t, execs, "sys_client")
 }
 
+func TestAutoMigrateRemovesUnmappedFilePermissions(t *testing.T) {
+	var execs []string
+	database := sql.OpenDB(migrateTestConnector{execs: &execs})
+	t.Cleanup(func() { _ = database.Close() })
+
+	if err := AutoMigrate(database); err != nil {
+		t.Fatalf("AutoMigrate returned error: %v", err)
+	}
+
+	assertExecutedSQL(t, execs, "delete from sys_role_menu", "system:file:get", "system:file:download")
+	assertExecutedSQL(t, execs, "delete from sys_menu", "system:file:get", "system:file:download")
+}
+
 func TestAutoMigrateEnsuresClientUserAndH5Client(t *testing.T) {
 	var execs []string
 	database := sql.OpenDB(migrateTestConnector{execs: &execs})
@@ -40,6 +53,20 @@ func TestAutoMigrateEnsuresClientUserAndH5Client(t *testing.T) {
 	assertExecutedSQL(t, execs, "sys_client", "h5-client")
 	assertExecutedSQL(t, execs, "sys_client", "'h5'")
 	assertExecutedSQL(t, execs, "sys_dict_item", "'h5'")
+}
+
+func TestAutoMigrateEnsuresDataScopeDictionary(t *testing.T) {
+	var execs []string
+	database := sql.OpenDB(migrateTestConnector{execs: &execs})
+	t.Cleanup(func() { _ = database.Close() })
+
+	if err := AutoMigrate(database); err != nil {
+		t.Fatalf("AutoMigrate returned error: %v", err)
+	}
+
+	assertExecutedSQL(t, execs, "sys_dict", "data_scope_enum")
+	assertExecutedSQL(t, execs, "sys_dict_item", "全部数据权限")
+	assertExecutedSQL(t, execs, "sys_dict_item", "自定义数据权限")
 }
 
 func TestAutoMigrateMarksSeedMenusAsSystem(t *testing.T) {

@@ -261,32 +261,35 @@ ORDER BY sort ASC, id ASC;
 func (h *CommonHandler) ListUserDict(c *gin.Context) {
 	statusStr := strings.TrimSpace(c.Query("status"))
 
-	baseSQL := `
-SELECT id,
-       COALESCE(nickname, username, ''),
-       COALESCE(username, '')
-FROM sys_user
-WHERE status = 1
-`
-	args := []any{}
+	where := "WHERE u.status = $1"
+	args := []any{int64(1)}
+	argPos := 2
 
 	// 如果显式传入 status，则按指定状态过滤。
 	if statusStr != "" {
 		if s, err := strconv.ParseInt(statusStr, 10, 64); err == nil && s > 0 {
-			baseSQL = `
-SELECT id,
-       COALESCE(nickname, username, ''),
-       COALESCE(username, '')
-FROM sys_user
-WHERE status = $1
-`
-			args = append(args, s)
+			args[0] = s
 		}
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendUserDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "u"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
 
-	baseSQL += " ORDER BY id ASC;"
+	query := `
+SELECT u.id,
+       COALESCE(u.nickname, u.username, ''),
+       COALESCE(u.username, '')
+FROM sys_user AS u
+` + where + `
+ORDER BY u.id ASC;`
 
-	rows, err := h.db.QueryContext(c.Request.Context(), baseSQL, args...)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		Fail(c, "500", "查询用户失败")
 		return

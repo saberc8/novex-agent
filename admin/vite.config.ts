@@ -36,7 +36,7 @@ export default defineConfig(({ command, mode }) => {
     server: {
       // 服务启动时是否自动打开浏览器
       open: true,
-      port: Number(env.VITE_PORT) || 3000,
+      port: Number(env.VITE_PORT) || 8202,
       // 本地跨域代理 -> 代理到服务器的接口地址
       proxy: {
         [env.VITE_API_PREFIX]: {

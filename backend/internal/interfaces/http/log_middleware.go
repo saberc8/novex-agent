@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -97,12 +98,12 @@ func (m *sysLogMiddleware) handle(c *gin.Context) {
 		RequestURL:     c.Request.URL.String(),
 		RequestMethod:  c.Request.Method,
 		RequestHeaders: marshalHeaders(c.Request.Header),
-		RequestBody:    string(reqBody),
+		RequestBody:    sanitizeLogPayload(reqBody, c.ContentType()),
 		StatusCode:     statusFromWriter(cw),
 		ResponseHeaders: marshalHeaders(
 			http.Header(cw.Header()),
 		),
-		ResponseBody: cw.body.String(),
+		ResponseBody: sanitizeLogPayload(cw.body.Bytes(), cw.Header().Get("Content-Type")),
 		TimeTaken:    duration.Milliseconds(),
 		IP:           truncateString(c.ClientIP(), 100),
 		Address:      "",
@@ -146,6 +147,10 @@ func marshalHeaders(h http.Header) string {
 	}
 	m := make(map[string]string, len(h))
 	for k, v := range h {
+		if isSensitiveLogKey(k) {
+			m[k] = redactedLogValue
+			continue
+		}
 		m[k] = strings.Join(v, ",")
 	}
 	b, err := json.Marshal(m)
@@ -153,6 +158,73 @@ func marshalHeaders(h http.Header) string {
 		return ""
 	}
 	return string(b)
+}
+
+const (
+	redactedLogValue = "***"
+	maxLogBodyLength = 8192
+)
+
+func sanitizeLogPayload(raw []byte, contentType string) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	contentType = strings.ToLower(contentType)
+	if strings.Contains(contentType, "multipart/form-data") {
+		return "[multipart body omitted]"
+	}
+	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+		values, err := url.ParseQuery(string(raw))
+		if err == nil {
+			for key := range values {
+				if isSensitiveLogKey(key) {
+					values.Set(key, redactedLogValue)
+				}
+			}
+			return truncateString(values.Encode(), maxLogBodyLength)
+		}
+	}
+
+	var body any
+	if err := json.Unmarshal(raw, &body); err == nil {
+		redactLogValue(body)
+		sanitized, err := json.Marshal(body)
+		if err == nil {
+			return truncateString(string(sanitized), maxLogBodyLength)
+		}
+	}
+	return truncateString(string(raw), maxLogBodyLength)
+}
+
+func redactLogValue(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, item := range v {
+			if isSensitiveLogKey(key) {
+				v[key] = redactedLogValue
+				continue
+			}
+			redactLogValue(item)
+		}
+	case []any:
+		for _, item := range v {
+			redactLogValue(item)
+		}
+	}
+}
+
+func isSensitiveLogKey(key string) bool {
+	normalized := strings.ToLower(strings.NewReplacer("_", "", "-", "", ".", "", " ", "").Replace(key))
+	switch normalized {
+	case "authorization", "cookie", "setcookie", "password", "passwd", "pwd", "token", "accesstoken", "refreshtoken", "secret", "secretkey", "accesskey", "privatekey", "captcha", "captchaverification":
+		return true
+	}
+	return strings.Contains(normalized, "password") ||
+		strings.Contains(normalized, "passwd") ||
+		strings.Contains(normalized, "token") ||
+		strings.Contains(normalized, "secret") ||
+		strings.Contains(normalized, "privatekey") ||
+		strings.Contains(normalized, "captchaverification")
 }
 
 // statusFromWriter 获取最终 HTTP 状态码，未显式设置时默认为 200。

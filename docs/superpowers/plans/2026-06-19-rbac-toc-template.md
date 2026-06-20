@@ -313,7 +313,7 @@ Document:
 backend: go run ./cmd/admin
 admin: pnpm dev
 client: pnpm dev
-ports: backend 4398, admin 5173, client 5174
+ports: backend 8201, admin 8202, client 8203
 client H5 clientId: h5-client
 admin PC clientId: ef51c9a3e9046c4f2ea45142c8a8344a
 ```

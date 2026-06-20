@@ -175,6 +175,8 @@ func newGuardTestRouter(userID int64, tokenSvc *security.TokenService) *gin.Engi
 		setCurrentPrincipal(c, &Principal{
 			UserID:      userID,
 			Username:    "operator",
+			DeptID:      1,
+			Roles:       []PrincipalRole{{ID: 2, Code: "operator", DataScope: dataScopeAll}},
 			Permissions: map[string]struct{}{},
 		})
 		c.Next()

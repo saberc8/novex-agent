@@ -9,6 +9,10 @@ import (
 	"io"
 	nethttp "net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -165,6 +169,54 @@ func TestDefaultRoutePermissionsCoverRegisteredProtectedRoutes(t *testing.T) {
 		if _, ok := index[key]; !ok {
 			t.Fatalf("missing RBAC permission mapping for registered route %s", key)
 		}
+	}
+}
+
+func TestDefaultRoutePermissionsCoverSeededPermissions(t *testing.T) {
+	allowed := make(map[string]struct{})
+	for _, route := range DefaultRoutePermissions() {
+		if strings.TrimSpace(route.Permission) != "" {
+			allowed[route.Permission] = struct{}{}
+		}
+		for _, permission := range route.AnyPermissions {
+			if strings.TrimSpace(permission) != "" {
+				allowed[permission] = struct{}{}
+			}
+		}
+	}
+
+	migrationPath := filepath.Join("..", "..", "infrastructure", "db", "migrate.go")
+	content, err := os.ReadFile(migrationPath)
+	if err != nil {
+		t.Fatalf("read migration seed: %v", err)
+	}
+	source := string(content)
+	seedStart := strings.Index(source, "const seedMenus = `")
+	if seedStart < 0 {
+		t.Fatal("migration seedMenus block not found")
+	}
+	seedEnd := strings.Index(source[seedStart:], "`\n\tif _, err := db.Exec(seedMenus)")
+	if seedEnd < 0 {
+		t.Fatal("migration seedMenus block terminator not found")
+	}
+	seedSQL := source[seedStart : seedStart+seedEnd]
+	permissionPattern := regexp.MustCompile(`'((?:system|monitor):[^']+)'`)
+	matches := permissionPattern.FindAllStringSubmatch(seedSQL, -1)
+
+	missing := make(map[string]struct{})
+	for _, match := range matches {
+		permission := match[1]
+		if _, ok := allowed[permission]; !ok {
+			missing[permission] = struct{}{}
+		}
+	}
+	if len(missing) > 0 {
+		list := make([]string, 0, len(missing))
+		for permission := range missing {
+			list = append(list, permission)
+		}
+		sort.Strings(list)
+		t.Fatalf("seeded permissions without backend RBAC contract: %s", strings.Join(list, ", "))
 	}
 }
 

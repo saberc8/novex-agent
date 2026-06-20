@@ -188,11 +188,11 @@ Expected: PASS and `dist/` generated locally.
 - Optional Create: `admin/.env.local.example`
 
 **Interfaces:**
-- Produces: clear startup instructions using existing Docker PostgreSQL/Redis/MinIO services and frontend port `5173`.
+- Produces: clear startup instructions using existing Docker PostgreSQL/Redis/MinIO services and frontend port `8202`.
 
 - [x] **Step 1: Update quick-start docs**
 
-Document backend env vars, frontend env vars, default ports `4398` and `5173`, existing Docker service assumptions, MinIO bucket setup, and verification commands.
+Document backend env vars, frontend env vars, default ports `8201` and `8202`, existing Docker service assumptions, MinIO bucket setup, and verification commands.
 
 - [x] **Step 2: Run full verification**
 

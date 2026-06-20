@@ -1,5 +1,5 @@
 import Mock from 'mockjs'
-import { random } from 'xe-utils'
+import XEUtils from 'xe-utils'
 
 /** 返回成功数据 */
 export const resultSuccess = (data: unknown) => {
@@ -23,5 +23,5 @@ export const resultError = (data: unknown, msg: string, code = 500) => {
 
 /** 获取 50-300ms 的随机延时 */
 export const getDelayTime = () => {
-  return random(50, 300)
+  return XEUtils.random(50, 300)
 }

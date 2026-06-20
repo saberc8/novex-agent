@@ -31,7 +31,7 @@
             </section>
           </div>
         </a-grid-item>
-        <template v-if="has.hasPermOr(['system:file:update', 'system:file:get', 'system:file:download', 'system:file:delete'])" #content>
+        <template v-if="has.hasPermOr(['system:file:list', 'system:file:update', 'system:file:delete'])" #content>
           <FileRightMenu :data="item" @click="handleRightMenuClick($event, item)"></FileRightMenu>
         </template>
       </a-trigger>
