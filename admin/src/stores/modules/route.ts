@@ -17,7 +17,12 @@ const layoutComponentMap = {
 
 /** 将component由字符串转成真正的模块 */
 const transformComponentView = (component: string) => {
-  return layoutComponentMap[component as keyof typeof layoutComponentMap] || asyncRouteModules[component]
+  const resolved = layoutComponentMap[component as keyof typeof layoutComponentMap] || asyncRouteModules[component]
+  if (!resolved) {
+    console.warn(`[route] component not found: ${component}`)
+    return () => import('@/views/default/error/404.vue')
+  }
+  return resolved
 }
 
 /**

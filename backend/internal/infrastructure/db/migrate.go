@@ -566,47 +566,40 @@ SELECT 1136, '清除缓存', 1130, 3, NULL, NULL, NULL, NULL, NULL,
        NULL, NULL, NULL, 'system:dict:item:clearCache', 6, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1136);
 
--- 字典项管理
+-- 字典项按钮权限：前端将字典项表格内嵌在字典管理页面。
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
                       create_user, create_time)
-SELECT 1140, '字典项管理', 1000, 2, '/system/dict/item', 'SystemDictItem', 'system/dict/item/index', NULL, 'bookmark',
-       FALSE, FALSE, TRUE, NULL, 8, 1, 1, NOW()
-WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1140);
-
-INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
-                      is_external, is_cache, is_hidden, permission, sort, status,
-                      create_user, create_time)
-SELECT 1141, '列表', 1140, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:dict:item:list', 1, 1, 1, NOW()
+SELECT 1141, '字典项列表', 1130, 3, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, 'system:dict:item:list', 7, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1141);
 
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
                       create_user, create_time)
-SELECT 1142, '详情', 1140, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:dict:item:get', 2, 1, 1, NOW()
+SELECT 1142, '字典项详情', 1130, 3, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, 'system:dict:item:get', 8, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1142);
 
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
                       create_user, create_time)
-SELECT 1143, '新增', 1140, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:dict:item:create', 3, 1, 1, NOW()
+SELECT 1143, '字典项新增', 1130, 3, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, 'system:dict:item:create', 9, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1143);
 
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
                       create_user, create_time)
-SELECT 1144, '修改', 1140, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:dict:item:update', 4, 1, 1, NOW()
+SELECT 1144, '字典项修改', 1130, 3, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, 'system:dict:item:update', 10, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1144);
 
 INSERT INTO sys_menu (id, title, parent_id, type, path, name, component, redirect, icon,
                       is_external, is_cache, is_hidden, permission, sort, status,
                       create_user, create_time)
-SELECT 1145, '删除', 1140, 3, NULL, NULL, NULL, NULL, NULL,
-       NULL, NULL, NULL, 'system:dict:item:delete', 5, 1, 1, NOW()
+SELECT 1145, '字典项删除', 1130, 3, NULL, NULL, NULL, NULL, NULL,
+       NULL, NULL, NULL, 'system:dict:item:delete', 11, 1, 1, NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = 1145);
 
 -- 系统配置
@@ -896,6 +889,22 @@ UPDATE sys_menu
    SET is_system = TRUE
  WHERE id BETWEEN 1000 AND 2033
    AND create_user = 1;
+
+UPDATE sys_menu
+   SET parent_id = 1130,
+       type = 3,
+       path = NULL,
+       name = NULL,
+       component = NULL,
+       redirect = NULL,
+       icon = NULL,
+       is_hidden = NULL,
+       update_user = 1,
+       update_time = NOW()
+ WHERE id IN (1141, 1142, 1143, 1144, 1145);
+
+DELETE FROM sys_role_menu WHERE menu_id = 1140;
+DELETE FROM sys_menu WHERE id = 1140;
 `
 	if _, err := db.Exec(seedMenus); err != nil {
 		return err

@@ -42,12 +42,10 @@ export interface RouteItem {
 }
 
 /** 认证类型 */
-export type AuthType = 'ACCOUNT' | 'EMAIL' | 'SOCIAL'
+export type AuthType = 'ACCOUNT'
 
 export const AuthTypeConstants = {
   ACCOUNT: 'ACCOUNT',
-  EMAIL: 'EMAIL',
-  SOCIAL: 'SOCIAL',
 } as const
 
 /** 基础认证请求接口 */
@@ -64,18 +62,7 @@ export interface AccountLoginReq extends AuthReq {
   uuid: string
 }
 
-/** 邮箱登录请求参数 */
-export interface EmailLoginReq extends AuthReq {
-  email: string
-  captcha: string
-}
-
 /** 登录响应类型 */
 export interface LoginResp {
   token: string
-}
-
-/** 第三方登录授权类型 */
-export interface SocialAuthAuthorizeResp {
-  authorizeUrl: string
 }

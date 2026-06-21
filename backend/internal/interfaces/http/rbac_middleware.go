@@ -209,6 +209,9 @@ func DefaultRoutePermissions() []RoutePermission {
 		{Method: nethttp.MethodPost, Path: "/auth/logout"},
 		{Method: nethttp.MethodGet, Path: "/auth/user/info"},
 		{Method: nethttp.MethodGet, Path: "/auth/user/route"},
+		{Method: nethttp.MethodPatch, Path: "/user/profile/avatar"},
+		{Method: nethttp.MethodPatch, Path: "/user/profile/basic/info"},
+		{Method: nethttp.MethodPatch, Path: "/user/profile/password"},
 
 		{Method: nethttp.MethodGet, Path: "/common/tree/menu", Permission: "system:menu:list"},
 		{Method: nethttp.MethodGet, Path: "/common/tree/dept", Permission: "system:dept:list"},

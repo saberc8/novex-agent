@@ -349,9 +349,3 @@ export interface SecurityConfig extends Record<string, OptionResp> {
 export interface LoginConfig extends Record<string, OptionResp> {
   LOGIN_CAPTCHA_ENABLED: OptionResp
 }
-
-/** 绑定三方账号信息 */
-export interface BindSocialAccountRes {
-  source: string
-  description: string
-}

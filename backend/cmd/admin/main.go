@@ -147,7 +147,7 @@ func main() {
 	commonHandler.RegisterProtectedCommonRoutes(r)
 
 	// 用户信息接口
-	userHandler := httpif.NewUserHandler(userRepo, roleRepo, menuRepo, tokenSvc)
+	userHandler := httpif.NewUserHandler(userRepo, roleRepo, menuRepo, tokenSvc, pg, rsaDecryptor, pwdHasher, pwdVerifier)
 	userHandler.RegisterUserRoutes(r)
 
 	// 系统监控：在线用户

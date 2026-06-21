@@ -26,6 +26,7 @@
 import type { FormInstance } from '@arco-design/web-vue'
 import { Message } from '@arco-design/web-vue'
 import { updateUserPassword } from '@/apis/system'
+import { useUserStore } from '@/stores'
 import { encryptByRsa } from '@/utils/encrypt'
 
 interface Form {
@@ -66,6 +67,7 @@ const rules: FormInstance['rules'] = {
   }],
 }
 const router = useRouter()
+const userStore = useUserStore()
 const loading = ref(false)
 
 // 登录
@@ -79,7 +81,8 @@ const onModify = async () => {
       newPassword: encryptByRsa(form.newPassword) || '',
     }
     await updateUserPassword(params)
-    router.push({
+    await userStore.logoutCallBack()
+    router.replace({
       path: '/login',
     })
     Message.success('修改成功')

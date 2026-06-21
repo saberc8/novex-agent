@@ -45,26 +45,6 @@ const userInfo = computed(() => userStore.userInfo)
 const modeList = ref<ModeItem[]>([])
 modeList.value = [
   {
-    title: '安全手机',
-    icon: 'phone-color',
-    value: userInfo.value.phone,
-    subtitle: `${userInfo.value.phone ? '' : '手机号'}可用于登录、身份验证、密码找回、通知接收`,
-    type: 'phone',
-    jumpMode: 'modal',
-    status: !!userInfo.value.phone,
-    statusString: userInfo.value.phone ? '已绑定' : '未绑定',
-  },
-  {
-    title: '安全邮箱',
-    icon: 'email-color',
-    value: userInfo.value.email,
-    subtitle: `${userInfo.value.email ? '' : '邮箱'}可用于登录、身份验证、密码找回、通知接收`,
-    type: 'email',
-    jumpMode: 'modal',
-    status: !!userInfo.value.email,
-    statusString: userInfo.value.email ? '已绑定' : '未绑定',
-  },
-  {
     title: '登录密码',
     icon: 'password-color',
     subtitle: userInfo.value.pwdResetTime ? `为了您的账号安全，建议定期修改密码` : '请设置密码，可通过账号+密码登录',

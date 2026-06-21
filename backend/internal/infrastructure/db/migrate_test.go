@@ -82,6 +82,20 @@ func TestAutoMigrateMarksSeedMenusAsSystem(t *testing.T) {
 	assertExecutedSQL(t, execs, "update sys_menu", "set is_system = true", "id between 1000 and 2033")
 }
 
+func TestAutoMigrateConsolidatesDictItemMenu(t *testing.T) {
+	var execs []string
+	database := sql.OpenDB(migrateTestConnector{execs: &execs})
+	t.Cleanup(func() { _ = database.Close() })
+
+	if err := AutoMigrate(database); err != nil {
+		t.Fatalf("AutoMigrate returned error: %v", err)
+	}
+
+	assertNotExecutedSQL(t, execs, "system/dict/item/index")
+	assertExecutedSQL(t, execs, "update sys_menu", "set parent_id = 1130", "where id in (1141, 1142, 1143, 1144, 1145)")
+	assertExecutedSQL(t, execs, "delete from sys_menu", "where id = 1140")
+}
+
 func assertExecutedCleanup(t *testing.T, execs []string, table string) {
 	t.Helper()
 	for _, query := range execs {
@@ -109,6 +123,23 @@ func assertExecutedSQL(t *testing.T, execs []string, parts ...string) {
 		}
 	}
 	t.Fatalf("expected executed SQL containing %q; executed queries:\n%s", parts, strings.Join(execs, "\n---\n"))
+}
+
+func assertNotExecutedSQL(t *testing.T, execs []string, parts ...string) {
+	t.Helper()
+	for _, query := range execs {
+		compact := strings.ToLower(strings.Join(strings.Fields(query), " "))
+		matched := true
+		for _, part := range parts {
+			if !strings.Contains(compact, strings.ToLower(part)) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			t.Fatalf("unexpected executed SQL containing %q; query:\n%s", parts, query)
+		}
+	}
 }
 
 type migrateTestConnector struct {

@@ -4,7 +4,7 @@
     :default-collapsed="false"
     :header-style="isDesktop ? { padding: 0, borderBottomWidth: 0 } : { borderBottomWidth: '1px' } "
   >
-    <template v-if="isDesktop" #left>
+    <template v-if="isDesktop && menuList.length" #left>
       <a-tabs v-model:active-key="activeKey" type="rounded" position="left" hide-content size="large" @change="change">
         <a-tab-pane v-for="(item) in menuList" :key="item.key">
           <template #title>
@@ -17,7 +17,7 @@
       </a-tabs>
     </template>
     <template #header>
-      <a-tabs v-if="!isDesktop" v-model:active-key="activeKey" type="rounded" position="top" size="large" @change="change">
+      <a-tabs v-if="!isDesktop && menuList.length" v-model:active-key="activeKey" type="rounded" position="top" size="large" @change="change">
         <a-tab-pane v-for="(item) in menuList" :key="item.key" :title="item.name">
           <template #title>
             <div style="display: flex; align-items: center">
@@ -29,7 +29,8 @@
       </a-tabs>
     </template>
     <transition name="fade-slide" mode="out-in" appear>
-      <component :is="menuList.find((item) => item.key === activeKey)?.value"></component>
+      <component :is="menuList.find((item) => item.key === activeKey)?.value" v-if="menuList.length"></component>
+      <a-empty v-else description="暂无可访问配置" />
     </transition>
   </GiPageLayout>
 </template>
@@ -64,12 +65,14 @@ const menuList = computed(() => {
 
 const route = useRoute()
 const router = useRouter()
-const activeKey = ref(menuList.value[0].key)
+const activeKey = ref(menuList.value[0]?.key || '')
 watch(
   () => route.query,
   () => {
-    if (route.query.tab) {
+    if (route.query.tab && menuList.value.some((item) => item.key === route.query.tab)) {
       activeKey.value = String(route.query.tab)
+    } else if (!activeKey.value && menuList.value.length) {
+      activeKey.value = menuList.value[0].key
     }
   },
   { immediate: true },

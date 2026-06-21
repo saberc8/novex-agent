@@ -52,10 +52,6 @@ const storeSetup = () => {
     token.value = res.data.token
   }
 
-  const emailLogin = async (_req?: any) => false
-
-  const socialLogin = async (_source?: string, _query?: any) => false
-
   // 退出登录回调
   const logoutCallBack = async () => {
     roles.value = []
@@ -95,8 +91,6 @@ const storeSetup = () => {
     permissions,
     pwdExpiredShow,
     accountLogin,
-    emailLogin,
-    socialLogin,
     logout,
     logoutCallBack,
     getInfo,

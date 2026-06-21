@@ -1,5 +1,3 @@
-export * from './area'
-export * from './area/type'
 export * from './auth'
 export * from './auth/type'
 export * from './common'
