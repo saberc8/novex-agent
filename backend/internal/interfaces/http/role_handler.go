@@ -102,6 +102,11 @@ func (h *RoleHandler) currentUserID(c *gin.Context) int64 {
 
 // ListRole handles GET /system/role/list.
 func (h *RoleHandler) ListRole(c *gin.Context) {
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
 	const query = `
 SELECT r.id,
        r.name,
@@ -169,6 +174,20 @@ ORDER BY r.sort ASC, r.id ASC;
 		Fail(c, "500", "查询角色失败")
 		return
 	}
+	if !principal.IsAdmin {
+		filtered := make([]RoleResp, 0, len(list))
+		for _, item := range list {
+			canManage, err := principalCanManageRole(c.Request.Context(), h.db, principal, item.ID)
+			if err != nil {
+				Fail(c, "500", "校验角色权限失败")
+				return
+			}
+			if canManage {
+				filtered = append(filtered, item)
+			}
+		}
+		list = filtered
+	}
 	OK(c, list)
 }
 
@@ -177,6 +196,20 @@ func (h *RoleHandler) GetRole(c *gin.Context) {
 	idVal, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || idVal <= 0 {
 		Fail(c, "400", "ID 参数不正确")
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canManage, err := principalCanManageRole(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验角色权限失败")
+		return
+	}
+	if !canManage {
+		Fail(c, "403", "没有查看该角色的权限")
 		return
 	}
 
@@ -319,6 +352,24 @@ func (h *RoleHandler) CreateRole(c *gin.Context) {
 	if req.DataScope == 0 {
 		req.DataScope = 4
 	}
+	req.DeptIDs = normalizeInt64IDs(req.DeptIDs)
+	if req.DataScope != dataScopeCustom {
+		req.DeptIDs = nil
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canConfigureScope, err := principalCanConfigureRoleDataScope(c.Request.Context(), h.db, principal, req.DataScope, req.DeptIDs)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canConfigureScope {
+		Fail(c, "403", "没有配置该数据权限范围的权限")
+		return
+	}
 
 	now := time.Now()
 	idVal := id.Next()
@@ -405,6 +456,33 @@ func (h *RoleHandler) UpdateRole(c *gin.Context) {
 	if req.DataScope == 0 {
 		req.DataScope = 4
 	}
+	req.DeptIDs = normalizeInt64IDs(req.DeptIDs)
+	if req.DataScope != dataScopeCustom {
+		req.DeptIDs = nil
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canManageRole, err := principalCanManageRole(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验角色权限失败")
+		return
+	}
+	if !canManageRole {
+		Fail(c, "403", "没有管理该角色的权限")
+		return
+	}
+	canConfigureScope, err := principalCanConfigureRoleDataScope(c.Request.Context(), h.db, principal, req.DataScope, req.DeptIDs)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canConfigureScope {
+		Fail(c, "403", "没有配置该数据权限范围的权限")
+		return
+	}
 
 	tx, err := h.db.BeginTx(c.Request.Context(), nil)
 	if err != nil {
@@ -479,6 +557,22 @@ func (h *RoleHandler) DeleteRole(c *gin.Context) {
 			return
 		}
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	for _, idVal := range normalizeInt64IDs(req.IDs) {
+		canManageRole, err := principalCanManageRole(c.Request.Context(), h.db, principal, idVal)
+		if err != nil {
+			Fail(c, "500", "校验角色权限失败")
+			return
+		}
+		if !canManageRole {
+			Fail(c, "403", "没有管理该角色的权限")
+			return
+		}
+	}
 
 	tx, err := h.db.BeginTx(c.Request.Context(), nil)
 	if err != nil {
@@ -531,6 +625,30 @@ func (h *RoleHandler) UpdateRolePermission(c *gin.Context) {
 	var req rolePermissionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, "400", "请求参数不正确")
+		return
+	}
+	req.MenuIDs = normalizeInt64IDs(req.MenuIDs)
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canManageRole, err := principalCanManageRole(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验角色权限失败")
+		return
+	}
+	if !canManageRole {
+		Fail(c, "403", "没有管理该角色的权限")
+		return
+	}
+	canAssignMenus, err := principalCanAssignMenuIDs(c.Request.Context(), h.db, principal, req.MenuIDs)
+	if err != nil {
+		Fail(c, "500", "校验菜单权限失败")
+		return
+	}
+	if !canAssignMenus {
+		Fail(c, "403", "没有分配所选菜单的权限")
 		return
 	}
 
@@ -592,6 +710,11 @@ func (h *RoleHandler) PageRoleUser(c *gin.Context) {
 	where := "WHERE ur.role_id = $1"
 	args := []any{roleID}
 	argPos := 2
+	if descFilter != "" {
+		where += fmt.Sprintf(" AND (u.username ILIKE $%d OR u.nickname ILIKE $%d OR COALESCE(u.description,'') ILIKE $%d)", argPos, argPos, argPos)
+		args = append(args, "%"+descFilter+"%")
+		argPos++
+	}
 	principal, ok := CurrentPrincipal(c)
 	if !ok {
 		Fail(c, "401", "未授权，请重新登录")
@@ -601,6 +724,27 @@ func (h *RoleHandler) PageRoleUser(c *gin.Context) {
 		Fail(c, "500", "解析数据权限失败")
 		return
 	}
+
+	countQuery := fmt.Sprintf(`
+SELECT COUNT(*)
+FROM sys_user_role AS ur
+JOIN sys_user AS u ON u.id = ur.user_id
+%s;
+`, where)
+	var total int64
+	if err := h.db.QueryRowContext(c.Request.Context(), countQuery, args...).Scan(&total); err != nil {
+		Fail(c, "500", "查询关联用户失败")
+		return
+	}
+	if total == 0 {
+		OK(c, PageResult[RoleUserResp]{List: []RoleUserResp{}, Total: 0})
+		return
+	}
+
+	limitPos := argPos
+	offsetPos := argPos + 1
+	offset := int64((page - 1) * size)
+	argsWithPage := append(args, int64(size), offset)
 
 	query := fmt.Sprintf(`
 SELECT ur.id,
@@ -618,9 +762,10 @@ FROM sys_user_role AS ur
 JOIN sys_user AS u ON u.id = ur.user_id
 LEFT JOIN sys_dept AS d ON d.id = u.dept_id
 %s
-ORDER BY ur.id DESC;
-`, where)
-	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
+ORDER BY ur.id DESC
+LIMIT $%d OFFSET $%d;
+`, where, limitPos, offsetPos)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, argsWithPage...)
 	if err != nil {
 		Fail(c, "500", "查询关联用户失败")
 		return
@@ -645,12 +790,6 @@ ORDER BY ur.id DESC;
 		); err != nil {
 			Fail(c, "500", "解析关联用户失败")
 			return
-		}
-		if descFilter != "" &&
-			!strings.Contains(item.Username, descFilter) &&
-			!strings.Contains(item.Nickname, descFilter) &&
-			!strings.Contains(item.Description, descFilter) {
-			continue
 		}
 		all = append(all, item)
 	}
@@ -716,18 +855,7 @@ WHERE ur.user_id = ANY($1::bigint[]);
 		}
 	}
 
-	total := int64(len(all))
-	start := (page - 1) * size
-	if start > len(all) {
-		start = len(all)
-	}
-	end := start + size
-	if end > len(all) {
-		end = len(all)
-	}
-	pageList := all[start:end]
-
-	OK(c, PageResult[RoleUserResp]{List: pageList, Total: total})
+	OK(c, PageResult[RoleUserResp]{List: all, Total: total})
 }
 
 // AssignToUsers handles POST /system/role/:id/user.
@@ -758,6 +886,19 @@ func (h *RoleHandler) AssignToUsers(c *gin.Context) {
 	principal, ok := CurrentPrincipal(c)
 	if !ok {
 		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if !CurrentUserIsAdmin(c) && containsInt64(userIDs, userID) {
+		Fail(c, "400", "不能给自己分配角色")
+		return
+	}
+	canGrantRole, err := principalCanGrantRoles(c.Request.Context(), h.db, principal, []int64{roleID})
+	if err != nil {
+		Fail(c, "500", "校验角色权限失败")
+		return
+	}
+	if !canGrantRole {
+		Fail(c, "403", "没有授予该角色的权限")
 		return
 	}
 	canAccessUsers, err := principalCanAccessUsers(c.Request.Context(), h.db, principal, userIDs)

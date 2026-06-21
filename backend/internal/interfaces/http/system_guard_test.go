@@ -27,6 +27,10 @@ type guardTestStore struct {
 	systemMenus           map[int64]string
 	menuParents           map[int64]int64
 	failOnUserRoleRewrite bool
+	roles                 map[int64]dataScopeTestRole
+	roleMenus             map[int64][]int64
+	userMenuIDs           map[int64][]int64
+	userDepts             map[int64]int64
 }
 
 func TestSystemRoleGuardRejectsDeleteByNonAdmin(t *testing.T) {
@@ -168,6 +172,97 @@ func TestSystemUserUpdateDoesNotRewriteRoles(t *testing.T) {
 	assertBusinessCode(t, resp, "200")
 }
 
+func TestSystemUserCreateRejectsAdminRoleGrantByNonAdmin(t *testing.T) {
+	tokenSvc := security.NewTokenService("guard-secret", time.Hour)
+	db := newGuardTestDB(t, guardTestStore{
+		roles: map[int64]dataScopeTestRole{
+			1: {id: 1, code: "admin", dataScope: dataScopeAll, isSystem: true},
+		},
+	})
+	handler := NewSystemUserHandler(db, tokenSvc, nil, security.BcryptHasher{})
+	router := newGuardTestRouter(99, tokenSvc)
+	router.POST("/system/user", handler.CreateUser)
+
+	resp := performGuardRequest(t, router, tokenSvc, nethttp.MethodPost, "/system/user", `{
+		"username":"new-admin",
+		"nickname":"New Admin",
+		"password":"encrypted",
+		"gender":1,
+		"status":1,
+		"deptId":1,
+		"roleIds":[1]
+	}`)
+
+	assertBusinessCode(t, resp, "403")
+}
+
+func TestSystemUserRoleUpdateRejectsAdminRoleGrantByNonAdmin(t *testing.T) {
+	tokenSvc := security.NewTokenService("guard-secret", time.Hour)
+	db := newGuardTestDB(t, guardTestStore{
+		roles: map[int64]dataScopeTestRole{
+			1: {id: 1, code: "admin", dataScope: dataScopeAll, isSystem: true},
+		},
+	})
+	handler := NewSystemUserHandler(db, tokenSvc, nil, security.BcryptHasher{})
+	router := newGuardTestRouter(99, tokenSvc)
+	router.PATCH("/system/user/:id/role", handler.UpdateUserRole)
+
+	resp := performGuardRequest(t, router, tokenSvc, nethttp.MethodPatch, "/system/user/10/role", `{"roleIds":[1]}`)
+
+	assertBusinessCode(t, resp, "403")
+}
+
+func TestRoleCreateRejectsAllDataScopeByNonAdmin(t *testing.T) {
+	tokenSvc := security.NewTokenService("guard-secret", time.Hour)
+	db := newGuardTestDB(t, guardTestStore{})
+	handler := NewRoleHandler(db, tokenSvc)
+	router := newGuardTestRouter(99, tokenSvc)
+	router.POST("/system/role", handler.CreateRole)
+
+	resp := performGuardRequest(t, router, tokenSvc, nethttp.MethodPost, "/system/role", `{
+		"name":"All Data",
+		"code":"all_data",
+		"sort":1,
+		"dataScope":1
+	}`)
+
+	assertBusinessCode(t, resp, "403")
+}
+
+func TestRolePermissionRejectsMenuOutsidePrincipalByNonAdmin(t *testing.T) {
+	tokenSvc := security.NewTokenService("guard-secret", time.Hour)
+	db := newGuardTestDB(t, guardTestStore{
+		roles: map[int64]dataScopeTestRole{
+			10: {id: 10, code: "operator", dataScope: dataScopeSelf},
+		},
+		userMenuIDs: map[int64][]int64{
+			99: {100},
+		},
+	})
+	handler := NewRoleHandler(db, tokenSvc)
+	router := newGuardTestRouter(99, tokenSvc)
+	router.PUT("/system/role/:id/permission", handler.UpdateRolePermission)
+
+	resp := performGuardRequest(t, router, tokenSvc, nethttp.MethodPut, "/system/role/10/permission", `{
+		"menuIds":[100,999],
+		"menuCheckStrictly":true
+	}`)
+
+	assertBusinessCode(t, resp, "403")
+}
+
+func TestRoleAssignRejectsSelfAssignmentByNonAdmin(t *testing.T) {
+	tokenSvc := security.NewTokenService("guard-secret", time.Hour)
+	db := newGuardTestDB(t, guardTestStore{})
+	handler := NewRoleHandler(db, tokenSvc)
+	router := newGuardTestRouter(99, tokenSvc)
+	router.POST("/system/role/:id/user", handler.AssignToUsers)
+
+	resp := performGuardRequest(t, router, tokenSvc, nethttp.MethodPost, "/system/role/10/user", `[99]`)
+
+	assertBusinessCode(t, resp, "400")
+}
+
 func newGuardTestRouter(userID int64, tokenSvc *security.TokenService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
@@ -246,6 +341,45 @@ func (c guardTestConn) QueryContext(_ context.Context, query string, args []driv
 	}
 	compact := strings.Join(strings.Fields(query), " ")
 	switch {
+	case strings.Contains(compact, "FROM sys_role") && strings.Contains(compact, "WHERE id = ANY"):
+		roleIDs := parseDriverInt64Array(args[0].Value)
+		values := make([][]driver.Value, 0, len(roleIDs))
+		for _, roleID := range roleIDs {
+			if role, ok := c.store.roles[roleID]; ok {
+				values = append(values, []driver.Value{role.id, role.code, role.dataScope, role.isSystem})
+			}
+		}
+		return newGuardRows([]string{"id", "code", "data_scope", "is_system"}, values), nil
+	case strings.Contains(compact, "FROM sys_role_menu") && strings.Contains(compact, "role_id = ANY"):
+		roleIDs := parseDriverInt64Array(args[0].Value)
+		values := make([][]driver.Value, 0)
+		for _, roleID := range roleIDs {
+			for _, menuID := range c.store.roleMenus[roleID] {
+				values = append(values, []driver.Value{roleID, menuID})
+			}
+		}
+		return newGuardRows([]string{"role_id", "menu_id"}, values), nil
+	case strings.Contains(compact, "FROM sys_role_menu") && strings.Contains(compact, "ur.user_id"):
+		userID := asInt64(args[0].Value)
+		requested := parseDriverInt64Array(args[1].Value)
+		owned := make(map[int64]struct{}, len(c.store.userMenuIDs[userID]))
+		for _, menuID := range c.store.userMenuIDs[userID] {
+			owned[menuID] = struct{}{}
+		}
+		values := make([][]driver.Value, 0, len(requested))
+		for _, menuID := range requested {
+			if _, ok := owned[menuID]; ok {
+				values = append(values, []driver.Value{menuID})
+			}
+		}
+		return newGuardRows([]string{"menu_id"}, values), nil
+	case strings.Contains(compact, "SELECT dept_id FROM sys_user"):
+		userID := asInt64(args[0].Value)
+		deptID, ok := c.store.userDepts[userID]
+		if !ok {
+			return newGuardRows([]string{"dept_id"}, nil), nil
+		}
+		return newGuardRows([]string{"dept_id"}, [][]driver.Value{{deptID}}), nil
 	case strings.Contains(compact, "FROM sys_role") && strings.Contains(compact, "is_system"):
 		if name, ok := c.store.systemRoles[id]; ok {
 			return newGuardRows([]string{"name"}, [][]driver.Value{{name}}), nil

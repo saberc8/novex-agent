@@ -177,14 +177,27 @@ ORDER BY sort ASC, id ASC;
 // ListDeptTree handles GET /common/tree/dept and returns a department tree
 // compatible with the front-end TreeNodeData definition.
 func (h *CommonHandler) ListDeptTree(c *gin.Context) {
-	// 当前实现简单返回所有部门树结构，前端已经有本地搜索能力。
-	const query = `
-SELECT id, name, parent_id, sort, status, is_system
-FROM sys_dept
-ORDER BY sort ASC, id ASC;
+	where := "WHERE 1=1"
+	args := []any{}
+	argPos := 1
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendDeptDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "d"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
+
+	query := `
+SELECT d.id, d.name, d.parent_id, d.sort, d.status, d.is_system
+FROM sys_dept AS d
+` + where + `
+ORDER BY d.sort ASC, d.id ASC;
 `
 
-	rows, err := h.db.QueryContext(c.Request.Context(), query)
+	rows, err := h.db.QueryContext(c.Request.Context(), query, args...)
 	if err != nil {
 		Fail(c, "500", "查询部门失败")
 		return
@@ -357,6 +370,29 @@ ORDER BY sort ASC, id ASC;
 	if err := rows.Err(); err != nil {
 		Fail(c, "500", "查询角色失败")
 		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if !principal.IsAdmin {
+		filtered := make([]LabelValue, 0, len(list))
+		for _, item := range list {
+			roleID, ok := item.Value.(int64)
+			if !ok {
+				continue
+			}
+			canGrant, err := principalCanGrantRoles(c.Request.Context(), h.db, principal, []int64{roleID})
+			if err != nil {
+				Fail(c, "500", "校验角色权限失败")
+				return
+			}
+			if canGrant {
+				filtered = append(filtered, item)
+			}
+		}
+		list = filtered
 	}
 	OK(c, list)
 }

@@ -2,6 +2,7 @@ package http
 
 import (
 	"database/sql"
+	"encoding/csv"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -269,7 +270,10 @@ LIMIT $%d OFFSET $%d;
 	}
 
 	// 填充角色信息
-	h.fillUserRoles(c, users)
+	if err := h.fillUserRoles(c, users); err != nil {
+		Fail(c, "500", "查询用户角色失败")
+		return
+	}
 
 	OK(c, PageResult[UserResp]{List: users, Total: total})
 }
@@ -375,15 +379,18 @@ ORDER BY u.id DESC`, where)
 		return
 	}
 
-	h.fillUserRoles(c, users)
+	if err := h.fillUserRoles(c, users); err != nil {
+		Fail(c, "500", "查询用户角色失败")
+		return
+	}
 
 	OK(c, users)
 }
 
 // fillUserRoles loads roleIds and roleNames for the given users.
-func (h *SystemUserHandler) fillUserRoles(c *gin.Context, users []UserResp) {
+func (h *SystemUserHandler) fillUserRoles(c *gin.Context, users []UserResp) error {
 	if len(users) == 0 {
-		return
+		return nil
 	}
 	userIDs := make([]int64, 0, len(users))
 	seen := make(map[int64]struct{})
@@ -401,7 +408,7 @@ WHERE ur.user_id = ANY($1::bigint[]);
 `
 	rows, err := h.db.QueryContext(c.Request.Context(), query, pqInt64Array(userIDs))
 	if err != nil {
-		return
+		return err
 	}
 	defer rows.Close()
 
@@ -414,7 +421,7 @@ WHERE ur.user_id = ANY($1::bigint[]);
 		var uid, rid int64
 		var name string
 		if err := rows.Scan(&uid, &rid, &name); err != nil {
-			return
+			return err
 		}
 		entry := roleMap[uid]
 		if entry == nil {
@@ -430,6 +437,10 @@ WHERE ur.user_id = ANY($1::bigint[]);
 			users[i].RoleNames = entry.names
 		}
 	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetUserDetail handles GET /system/user/:id.
@@ -526,7 +537,10 @@ LEFT JOIN sys_user AS uu ON uu.id = u.update_user
 
 	// 角色信息
 	roleUsers := []UserResp{u.UserResp}
-	h.fillUserRoles(c, roleUsers)
+	if err := h.fillUserRoles(c, roleUsers); err != nil {
+		Fail(c, "500", "查询用户角色失败")
+		return
+	}
 	if len(roleUsers) > 0 {
 		u.RoleIDs = roleUsers[0].RoleIDs
 		u.RoleNames = roleUsers[0].RoleNames
@@ -576,6 +590,16 @@ func (h *SystemUserHandler) CreateUser(c *gin.Context) {
 	}
 	if !canUseDept {
 		Fail(c, "403", "没有该部门的数据权限")
+		return
+	}
+	req.RoleIDs = normalizeInt64IDs(req.RoleIDs)
+	canGrantRoles, err := principalCanGrantRoles(c.Request.Context(), h.db, principal, req.RoleIDs)
+	if err != nil {
+		Fail(c, "500", "校验角色权限失败")
+		return
+	}
+	if !canGrantRoles {
+		Fail(c, "403", "没有授予所选角色的权限")
 		return
 	}
 
@@ -969,6 +993,16 @@ func (h *SystemUserHandler) UpdateUserRole(c *gin.Context) {
 		Fail(c, "400", "请求参数不正确")
 		return
 	}
+	req.RoleIDs = normalizeInt64IDs(req.RoleIDs)
+	canGrantRoles, err := principalCanGrantRoles(c.Request.Context(), h.db, principal, req.RoleIDs)
+	if err != nil {
+		Fail(c, "500", "校验角色权限失败")
+		return
+	}
+	if !canGrantRoles {
+		Fail(c, "403", "没有授予所选角色的权限")
+		return
+	}
 
 	tx, err := h.db.BeginTx(c.Request.Context(), nil)
 	if err != nil {
@@ -1026,7 +1060,11 @@ func (h *SystemUserHandler) ExportUser(c *gin.Context) {
 	defer rows.Close()
 
 	var b strings.Builder
-	b.WriteString("username,nickname,gender,email,phone\n")
+	writer := csv.NewWriter(&b)
+	if err := writer.Write([]string{"username", "nickname", "gender", "email", "phone"}); err != nil {
+		Fail(c, "500", "导出用户失败")
+		return
+	}
 	for rows.Next() {
 		var username, nickname, email, phone string
 		var gender int16
@@ -1034,13 +1072,42 @@ func (h *SystemUserHandler) ExportUser(c *gin.Context) {
 			Fail(c, "500", "导出用户失败")
 			return
 		}
-		line := fmt.Sprintf("%s,%s,%d,%s,%s\n", username, nickname, gender, email, phone)
-		b.WriteString(line)
+		if err := writer.Write([]string{
+			safeCSVCell(username),
+			safeCSVCell(nickname),
+			strconv.FormatInt(int64(gender), 10),
+			safeCSVCell(email),
+			safeCSVCell(phone),
+		}); err != nil {
+			Fail(c, "500", "导出用户失败")
+			return
+		}
+	}
+	if err := rows.Err(); err != nil {
+		Fail(c, "500", "导出用户失败")
+		return
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		Fail(c, "500", "导出用户失败")
+		return
 	}
 
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", "attachment; filename=\"users.csv\"")
 	c.String(http.StatusOK, b.String())
+}
+
+func safeCSVCell(value string) string {
+	if value == "" {
+		return value
+	}
+	switch value[0] {
+	case '=', '+', '-', '@':
+		return "'" + value
+	default:
+		return value
+	}
 }
 
 // DownloadImportTemplate handles GET /system/user/import/template.

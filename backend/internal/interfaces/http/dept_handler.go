@@ -3,6 +3,7 @@ package http
 import (
 	"database/sql"
 	"encoding/csv"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -100,6 +101,15 @@ func (h *DeptHandler) ListDeptTree(c *gin.Context) {
 		where += " AND d.status = $" + strconv.Itoa(argPos)
 		args = append(args, status)
 		argPos++
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendDeptDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "d"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
 	}
 
 	query := `
@@ -225,6 +235,20 @@ func (h *DeptHandler) GetDept(c *gin.Context) {
 		Fail(c, "400", "无效的部门 ID")
 		return
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canUseDept, err := principalCanUseDept(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canUseDept {
+		Fail(c, "403", "没有该部门的数据权限")
+		return
+	}
 
 	const query = `
 SELECT d.id,
@@ -320,6 +344,24 @@ func (h *DeptHandler) CreateDept(c *gin.Context) {
 	if req.Status == 0 {
 		req.Status = 1
 	}
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canUseParent, err := principalCanUseDept(c.Request.Context(), h.db, principal, req.ParentID)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canUseParent {
+		Fail(c, "403", "没有上级部门的数据权限")
+		return
+	}
 
 	// Check name uniqueness under same parent.
 	const checkSQL = `
@@ -348,11 +390,6 @@ LIMIT 1;
 	}
 
 	now := time.Now()
-	userID := h.currentUserID(c)
-	if userID == 0 {
-		return
-	}
-
 	newID := id.Next()
 	const insertSQL = `
 INSERT INTO sys_dept (
@@ -408,6 +445,33 @@ func (h *DeptHandler) UpdateDept(c *gin.Context) {
 	if req.Status == 0 {
 		req.Status = 1
 	}
+	userID := h.currentUserID(c)
+	if userID == 0 {
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	canUseDept, err := principalCanUseDept(c.Request.Context(), h.db, principal, idVal)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canUseDept {
+		Fail(c, "403", "没有该部门的数据权限")
+		return
+	}
+	canUseParent, err := principalCanUseDept(c.Request.Context(), h.db, principal, req.ParentID)
+	if err != nil {
+		Fail(c, "500", "校验数据权限失败")
+		return
+	}
+	if !canUseParent {
+		Fail(c, "403", "没有上级部门的数据权限")
+		return
+	}
 
 	// Load existing dept.
 	const selectSQL = `
@@ -458,11 +522,6 @@ LIMIT 1;
 	}
 
 	now := time.Now()
-	userID := h.currentUserID(c)
-	if userID == 0 {
-		return
-	}
-
 	const updateSQL = `
 UPDATE sys_dept
 SET name = $1,
@@ -499,6 +558,27 @@ func (h *DeptHandler) DeleteDept(c *gin.Context) {
 	if err := c.ShouldBindJSON(&body); err != nil || len(body.IDs) == 0 {
 		Fail(c, "400", "参数错误")
 		return
+	}
+	body.IDs = normalizeInt64IDs(body.IDs)
+	if len(body.IDs) == 0 {
+		Fail(c, "400", "参数错误")
+		return
+	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	for _, deptID := range body.IDs {
+		canUseDept, err := principalCanUseDept(c.Request.Context(), h.db, principal, deptID)
+		if err != nil {
+			Fail(c, "500", "校验数据权限失败")
+			return
+		}
+		if !canUseDept {
+			Fail(c, "403", "没有该部门的数据权限")
+			return
+		}
 	}
 
 	// 1. Prevent deleting system departments.
@@ -591,6 +671,15 @@ func (h *DeptHandler) ExportDept(c *gin.Context) {
 		args = append(args, status)
 		argPos++
 	}
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if err := appendDeptDataScopeFilter(c.Request.Context(), h.db, principal, &where, &args, &argPos, "d"); err != nil {
+		Fail(c, "500", "解析数据权限失败")
+		return
+	}
 
 	query := `
 SELECT d.id,
@@ -618,11 +707,12 @@ ORDER BY d.sort ASC, d.id ASC;
 	}
 	defer rows.Close()
 
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", "attachment; filename=\"dept_export.csv\"")
-
-	writer := csv.NewWriter(c.Writer)
-	_ = writer.Write([]string{"ID", "名称", "上级部门ID", "状态", "排序", "系统内置", "描述", "创建时间", "创建人", "修改时间", "修改人"})
+	var b strings.Builder
+	writer := csv.NewWriter(&b)
+	if err := writer.Write([]string{"ID", "名称", "上级部门ID", "状态", "排序", "系统内置", "描述", "创建时间", "创建人", "修改时间", "修改人"}); err != nil {
+		Fail(c, "500", "导出部门失败")
+		return
+	}
 
 	for rows.Next() {
 		var (
@@ -648,7 +738,8 @@ ORDER BY d.sort ASC, d.id ASC;
 			&updateTime,
 			&updateUser,
 		); err != nil {
-			continue
+			Fail(c, "500", "导出部门失败")
+			return
 		}
 
 		ut := ""
@@ -658,18 +749,33 @@ ORDER BY d.sort ASC, d.id ASC;
 
 		record := []string{
 			strconv.FormatInt(id, 10),
-			name,
+			safeCSVCell(name),
 			strconv.FormatInt(parentID, 10),
 			strconv.FormatInt(int64(statusVal), 10),
 			strconv.FormatInt(int64(sortVal), 10),
 			strconv.FormatBool(isSystem),
-			description,
+			safeCSVCell(description),
 			createTime.Format(time.RFC3339),
-			createUser,
+			safeCSVCell(createUser),
 			ut,
-			updateUser,
+			safeCSVCell(updateUser),
 		}
-		_ = writer.Write(record)
+		if err := writer.Write(record); err != nil {
+			Fail(c, "500", "导出部门失败")
+			return
+		}
+	}
+	if err := rows.Err(); err != nil {
+		Fail(c, "500", "导出部门失败")
+		return
 	}
 	writer.Flush()
+	if err := writer.Error(); err != nil {
+		Fail(c, "500", "导出部门失败")
+		return
+	}
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", "attachment; filename=\"dept_export.csv\"")
+	c.String(http.StatusOK, b.String())
 }
