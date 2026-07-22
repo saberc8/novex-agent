@@ -180,11 +180,10 @@ func (c clientAuthTestConn) QueryContext(_ context.Context, query string, args [
 	switch {
 	case strings.Contains(compact, "from sys_client"):
 		clientID := asString(args[0].Value)
-		active := int64(0)
 		if c.store.activeH5[clientID] {
-			active = 1
+			return newClientAuthRows([]string{"active_timeout", "timeout"}, [][]driver.Value{{int64(1800), int64(3600)}}), nil
 		}
-		return newClientAuthRows([]string{"active"}, [][]driver.Value{{active}}), nil
+		return newClientAuthRows([]string{"active_timeout", "timeout"}, nil), nil
 	case strings.Contains(compact, "from client_user") && strings.Contains(compact, "where phone"):
 		phone := asString(args[0].Value)
 		id, ok := c.store.phoneIndex[phone]

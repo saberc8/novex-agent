@@ -9,6 +9,8 @@ import (
 	"voc-go-backend/internal/infrastructure/security"
 )
 
+var ErrInvalidCredentials = errors.New("用户名或密码不正确")
+
 // Service handles authentication use cases.
 type Service struct {
 	users       domain.Repository
@@ -59,7 +61,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 	// 用户名或密码不正确（与 Java 提示保持一致）
 	if user == nil {
-		return nil, errors.New("用户名或密码不正确")
+		return nil, ErrInvalidCredentials
 	}
 
 	ok, err := s.pwdVerifier.Verify(rawPassword, user.Password)
@@ -67,14 +69,14 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 	if !ok {
-		return nil, errors.New("用户名或密码不正确")
+		return nil, ErrInvalidCredentials
 	}
 
 	if !user.IsEnabled() {
 		return nil, errors.New("此账号已被禁用，如有疑问，请联系管理员")
 	}
 
-	token, err := s.tokenSvc.Generate(user.ID)
+	token, err := s.tokenSvc.GenerateForSubjectWithTTL(user.ID, security.SubjectAdmin, req.TokenTTL)
 	if err != nil {
 		return nil, err
 	}

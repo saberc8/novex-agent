@@ -50,5 +50,13 @@ func Fail(c *gin.Context, code, msg string) {
 		Success:   false,
 		Timestamp: nowString(),
 	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(httpStatusForCode(code), resp)
+}
+
+func httpStatusForCode(code string) int {
+	status, err := strconv.Atoi(code)
+	if err != nil || status < 400 || status > 599 {
+		return http.StatusInternalServerError
+	}
+	return status
 }

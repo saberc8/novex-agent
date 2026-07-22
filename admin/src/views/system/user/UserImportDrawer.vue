@@ -28,9 +28,9 @@
             :custom-request="handleUpload"
             :limit="1"
             :show-retry-button="false"
-            :show-cancel-button="false" tip="仅支持xls、xlsx格式"
+            :show-cancel-button="false" tip="仅支持 CSV 格式（请使用下载的模板）"
             :file-list="uploadFile"
-            accept=".xls, .xlsx, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".csv, text/csv"
           />
         </div>
         <div v-if="dataResult.importKey">

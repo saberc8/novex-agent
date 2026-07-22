@@ -2,12 +2,14 @@ package http
 
 import (
 	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 
 	"voc-go-backend/internal/application/auth"
+	"voc-go-backend/internal/infrastructure/security"
 )
 
 // AuthHandler 暴露认证相关 HTTP 接口。
@@ -16,17 +18,22 @@ type AuthHandler struct {
 	online *OnlineStore
 	db     *sql.DB
 	redis  *redis.Client
+	tokens *security.TokenService
 }
 
 // NewAuthHandler 创建认证接口处理器。
 // 其中 db 用于读取登录相关配置（如是否启用验证码）。
-func NewAuthHandler(svc *auth.Service, online *OnlineStore, db *sql.DB, redisClient *redis.Client) *AuthHandler {
-	return &AuthHandler{
+func NewAuthHandler(svc *auth.Service, online *OnlineStore, db *sql.DB, redisClient *redis.Client, tokenServices ...*security.TokenService) *AuthHandler {
+	handler := &AuthHandler{
 		svc:    svc,
 		online: online,
 		db:     db,
 		redis:  redisClient,
 	}
+	if len(tokenServices) > 0 {
+		handler.tokens = tokenServices[0]
+	}
+	return handler
 }
 
 // RegisterAuthRoutes 注册 /auth 相关路由。
@@ -53,13 +60,34 @@ func (h *AuthHandler) RegisterProtectedAuthRoutes(r *gin.Engine) {
 // @Produce json
 // @Param data body auth.LoginRequest true "登录请求参数"
 // @Success 200 {object} map[string]interface{} "统一响应包装，data 为 LoginResponse"
-// @Failure 200 {object} map[string]interface{} "失败时 code!=200，msg 为错误信息"
+// @Failure 400 {object} map[string]interface{} "登录参数或凭据错误"
+// @Failure 423 {object} map[string]interface{} "账号被临时锁定"
 // @Router /auth/login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req auth.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		// 参数缺失或格式不正确
 		Fail(c, "400", "参数缺失或格式不正确")
+		return
+	}
+	policy, err := loadClientSessionPolicy(c.Request.Context(), h.db, req.ClientID, "PC")
+	if err != nil {
+		Fail(c, "400", "客户端不可用")
+		return
+	}
+	req.TokenTTL = policy.TokenTTL
+	passwordPolicy, err := loadPasswordPolicy(c.Request.Context(), h.db)
+	if err != nil {
+		Fail(c, "500", "读取密码策略失败")
+		return
+	}
+	locked, err := isLoginLocked(c.Request.Context(), h.redis, req.Username, passwordPolicy)
+	if err != nil {
+		Fail(c, "500", "读取账号锁定状态失败")
+		return
+	}
+	if locked {
+		Fail(c, "423", "登录失败次数过多，账号已临时锁定")
 		return
 	}
 
@@ -110,13 +138,32 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	resp, err := h.svc.Login(c.Request.Context(), req)
 	if err != nil {
-		// Treat any error returned by the service as a 400-style business error,
-		// with the message coming from the service (already localized).
+		if errors.Is(err, auth.ErrInvalidCredentials) {
+			locked, lockErr := recordLoginFailure(c.Request.Context(), h.redis, req.Username, passwordPolicy)
+			if lockErr != nil {
+				Fail(c, "500", "记录登录失败次数失败")
+				return
+			}
+			if locked {
+				Fail(c, "423", "登录失败次数过多，账号已临时锁定")
+				return
+			}
+		}
 		Fail(c, "400", err.Error())
 		return
 	}
+	if err := clearLoginFailures(c.Request.Context(), h.redis, req.Username); err != nil {
+		Fail(c, "500", "清理登录失败状态失败")
+		return
+	}
+	if h.tokens != nil && resp != nil {
+		if err := h.tokens.RegisterSession(c.Request.Context(), resp.Token, policy.ActiveTimeout); err != nil {
+			Fail(c, "500", "创建登录会话失败")
+			return
+		}
+	}
 
-	// 登录成功后记录在线用户信息（仅在当前 Go 进程内维护内存状态）。
+	// 登录成功后记录在线用户展示信息；令牌有效性和撤销状态由 Redis 会话维护。
 	if h.online != nil && resp != nil {
 		h.online.RecordLogin(c, resp.UserID, resp.Username, resp.Nickname, req.ClientID, resp.Token)
 	}
@@ -127,9 +174,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 // Logout 处理 POST /auth/logout。
-// 前端仅依赖服务端返回成功，本实现主要用于清理 Go 进程内的在线用户列表。
+// 同时撤销 Redis 中的服务端会话，并清理在线用户展示记录。
 // @Summary 用户登出
-// @Description 基于 Authorization Bearer Token 进行登出，仅清理服务端在线用户。
+// @Description 基于 Authorization Bearer Token 撤销服务端会话并登出。
 // @Tags 认证
 // @Produce json
 // @Success 200 {object} map[string]interface{} "统一响应包装，data 为 true/false"
@@ -141,7 +188,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		token = strings.TrimSpace(token[7:])
 	}
 	if token != "" && h.online != nil {
-		h.online.RemoveByToken(token)
+		h.online.RemoveByToken(c.Request.Context(), token)
+	}
+	if h.tokens != nil {
+		if err := h.tokens.RevokeSession(c.Request.Context(), authz); err != nil {
+			Fail(c, "500", "退出登录失败")
+			return
+		}
 	}
 	OK(c, true)
 }

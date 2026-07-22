@@ -10,35 +10,6 @@ import (
 	"testing"
 )
 
-func TestAutoMigrateRemovesLegacyReactInitialization(t *testing.T) {
-	var execs []string
-	database := sql.OpenDB(migrateTestConnector{execs: &execs})
-	t.Cleanup(func() { _ = database.Close() })
-
-	if err := AutoMigrate(database); err != nil {
-		t.Fatalf("AutoMigrate returned error: %v", err)
-	}
-
-	assertExecutedCleanup(t, execs, "sys_role_menu")
-	assertExecutedCleanup(t, execs, "sys_menu")
-	assertExecutedCleanup(t, execs, "sys_dict_item")
-	assertExecutedCleanup(t, execs, "sys_option")
-	assertExecutedCleanup(t, execs, "sys_client")
-}
-
-func TestAutoMigrateRemovesUnmappedFilePermissions(t *testing.T) {
-	var execs []string
-	database := sql.OpenDB(migrateTestConnector{execs: &execs})
-	t.Cleanup(func() { _ = database.Close() })
-
-	if err := AutoMigrate(database); err != nil {
-		t.Fatalf("AutoMigrate returned error: %v", err)
-	}
-
-	assertExecutedSQL(t, execs, "delete from sys_role_menu", "system:file:get", "system:file:download")
-	assertExecutedSQL(t, execs, "delete from sys_menu", "system:file:get", "system:file:download")
-}
-
 func TestAutoMigrateEnsuresClientUserAndH5Client(t *testing.T) {
 	var execs []string
 	database := sql.OpenDB(migrateTestConnector{execs: &execs})
@@ -93,18 +64,8 @@ func TestAutoMigrateConsolidatesDictItemMenu(t *testing.T) {
 
 	assertNotExecutedSQL(t, execs, "system/dict/item/index")
 	assertExecutedSQL(t, execs, "update sys_menu", "set parent_id = 1130", "where id in (1141, 1142, 1143, 1144, 1145)")
-	assertExecutedSQL(t, execs, "delete from sys_menu", "where id = 1140")
-}
-
-func assertExecutedCleanup(t *testing.T, execs []string, table string) {
-	t.Helper()
-	for _, query := range execs {
-		compact := strings.ToLower(strings.Join(strings.Fields(query), " "))
-		if strings.Contains(compact, table) && strings.Contains(compact, "delete") && strings.Contains(compact, "react") {
-			return
-		}
-	}
-	t.Fatalf("expected cleanup DELETE for %s containing legacy react filter; executed queries:\n%s", table, strings.Join(execs, "\n---\n"))
+	assertNotExecutedSQL(t, execs, "delete from sys_role_menu", "menu_id = 1140")
+	assertNotExecutedSQL(t, execs, "delete from sys_menu", "where id = 1140")
 }
 
 func assertExecutedSQL(t *testing.T, execs []string, parts ...string) {

@@ -55,7 +55,7 @@ func loadClientPrincipal(c *gin.Context, db *sql.DB, tokenSvc *security.TokenSer
 	if db == nil || tokenSvc == nil {
 		return nil, errors.New("client auth dependency is nil")
 	}
-	claims, err := tokenSvc.Parse(c.GetHeader("Authorization"))
+	claims, err := tokenSvc.ParseContext(c.Request.Context(), c.GetHeader("Authorization"))
 	if err != nil || claims.UserID == 0 || claims.Subject != security.SubjectClient {
 		return nil, errors.New("invalid client token")
 	}

@@ -1,6 +1,6 @@
 /** 接口返回数据格式 */
 interface ApiRes<T> {
-  code: number
+  code: string
   data: T
   msg: string
   success: boolean

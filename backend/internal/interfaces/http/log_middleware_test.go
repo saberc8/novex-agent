@@ -64,3 +64,29 @@ func TestSysLogMiddlewareRedactsSensitivePayloads(t *testing.T) {
 		t.Fatalf("request headers did not redact Authorization: %s", repo.record.RequestHeaders)
 	}
 }
+
+func TestSysLogMiddlewareDoesNotLeakSecretsFromTruncatedJSON(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repo := &captureSysLogRepo{}
+	router := gin.New()
+	router.Use(NewSysLogMiddleware(repo, nil))
+	router.POST("/large", func(c *gin.Context) {
+		OK(c, true)
+	})
+
+	body := `{"password":"must-not-leak","padding":"` + strings.Repeat("x", maxLogBodyLength*2) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/large", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if repo.record == nil {
+		t.Fatal("expected syslog record")
+	}
+	if strings.Contains(repo.record.RequestBody, "must-not-leak") {
+		t.Fatalf("truncated JSON leaked a password: %s", repo.record.RequestBody)
+	}
+	if repo.record.RequestBody != "[json body omitted: invalid or truncated]" {
+		t.Fatalf("unexpected request body: %s", repo.record.RequestBody)
+	}
+}

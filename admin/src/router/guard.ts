@@ -97,6 +97,9 @@ export const setupRouterGuard = (router: Router) => {
               Message.warning('密码已过期，请修改密码')
               return next('/pwdExpired')
             }
+            if (userStore.userInfo.pwdExpireWarning) {
+              Message.warning(`密码将在 ${userStore.userInfo.pwdExpireDays} 天内到期，请及时修改`)
+            }
             const accessRoutes = await routeStore.generateRoutes()
             accessRoutes.forEach((route) => {
               if (!isHttp(route.path)) {

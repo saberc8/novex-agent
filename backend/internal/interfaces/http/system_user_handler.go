@@ -1,15 +1,21 @@
 package http
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/mail"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 
 	"voc-go-backend/internal/infrastructure/id"
 	"voc-go-backend/internal/infrastructure/security"
@@ -66,7 +72,7 @@ type userRoleUpdateReq struct {
 	RoleIDs []int64 `json:"roleIds"`
 }
 
-// UserImportParseResp is a simplified version of UserImportParseResp in Java.
+// UserImportParseResp summarizes validated CSV data held temporarily in Redis.
 type UserImportParseResp struct {
 	ImportKey          string `json:"importKey"`
 	TotalRows          int    `json:"totalRows"`
@@ -76,11 +82,34 @@ type UserImportParseResp struct {
 	DuplicatePhoneRows int    `json:"duplicatePhoneRows"`
 }
 
-// UserImportResultResp matches UserImportResp in Java (used as import result).
+// UserImportResultResp summarizes a committed user import.
 type UserImportResultResp struct {
 	TotalRows  int `json:"totalRows"`
 	InsertRows int `json:"insertRows"`
 	UpdateRows int `json:"updateRows"`
+}
+
+type userImportRow struct {
+	Username string `json:"username"`
+	Nickname string `json:"nickname"`
+	Password string `json:"password"`
+	Gender   int16  `json:"gender"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+}
+
+type userImportPayload struct {
+	OwnerUserID int64           `json:"ownerUserId"`
+	DeptID      int64           `json:"deptId"`
+	Rows        []userImportRow `json:"rows"`
+}
+
+type userImportReq struct {
+	ImportKey      string `json:"importKey"`
+	DuplicateUser  int    `json:"duplicateUser"`
+	DuplicateEmail int    `json:"duplicateEmail"`
+	DuplicatePhone int    `json:"duplicatePhone"`
+	DefaultStatus  int16  `json:"defaultStatus"`
 }
 
 // SystemUserHandler provides /system/user endpoints.
@@ -89,15 +118,20 @@ type SystemUserHandler struct {
 	tokenSvc     *security.TokenService
 	rsaDecryptor *security.RSADecryptor
 	hasher       security.PasswordHasher
+	redis        *redis.Client
 }
 
-func NewSystemUserHandler(db *sql.DB, tokenSvc *security.TokenService, rsa *security.RSADecryptor, hasher security.PasswordHasher) *SystemUserHandler {
-	return &SystemUserHandler{
+func NewSystemUserHandler(db *sql.DB, tokenSvc *security.TokenService, rsa *security.RSADecryptor, hasher security.PasswordHasher, redisClients ...*redis.Client) *SystemUserHandler {
+	handler := &SystemUserHandler{
 		db:           db,
 		tokenSvc:     tokenSvc,
 		rsaDecryptor: rsa,
 		hasher:       hasher,
 	}
+	if len(redisClients) > 0 {
+		handler.redis = redisClients[0]
+	}
+	return handler
 }
 
 // RegisterSystemUserRoutes registers /system/user related routes.
@@ -111,7 +145,7 @@ func (h *SystemUserHandler) RegisterSystemUserRoutes(r *gin.Engine) {
 	r.PATCH("/system/user/:id/password", h.ResetPassword)
 	r.PATCH("/system/user/:id/role", h.UpdateUserRole)
 
-	// 导出与导入相关接口（简化实现）
+	// 导出与导入相关接口
 	r.GET("/system/user/export", h.ExportUser)
 	r.GET("/system/user/import/template", h.DownloadImportTemplate)
 	r.POST("/system/user/import/parse", h.ParseImportUser)
@@ -608,21 +642,13 @@ func (h *SystemUserHandler) CreateUser(c *gin.Context) {
 		Fail(c, "400", "密码解密失败")
 		return
 	}
-	if len(rawPwd) < 8 || len(rawPwd) > 32 {
-		Fail(c, "400", "密码长度为 8-32 个字符，至少包含字母和数字")
+	passwordPolicy, err := loadPasswordPolicy(c.Request.Context(), h.db)
+	if err != nil {
+		Fail(c, "500", "读取密码策略失败")
 		return
 	}
-	var hasLetter, hasDigit bool
-	for _, ch := range rawPwd {
-		switch {
-		case ch >= '0' && ch <= '9':
-			hasDigit = true
-		case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'):
-			hasLetter = true
-		}
-	}
-	if !hasLetter || !hasDigit {
-		Fail(c, "400", "密码长度为 8-32 个字符，至少包含字母和数字")
+	if err := validatePassword(rawPwd, req.Username, passwordPolicy); err != nil {
+		Fail(c, "400", err.Error())
 		return
 	}
 
@@ -915,21 +941,37 @@ func (h *SystemUserHandler) ResetPassword(c *gin.Context) {
 		Fail(c, "400", "密码解密失败")
 		return
 	}
-	if len(rawPwd) < 8 || len(rawPwd) > 32 {
-		Fail(c, "400", "密码长度为 8-32 个字符，至少包含字母和数字")
+	var targetUsername, currentHash string
+	if err := h.db.QueryRowContext(
+		c.Request.Context(),
+		`SELECT username, COALESCE(password, '') FROM sys_user WHERE id = $1 LIMIT 1`,
+		idVal,
+	).Scan(&targetUsername, &currentHash); err != nil {
+		if err == sql.ErrNoRows {
+			Fail(c, "404", "用户不存在")
+			return
+		}
+		Fail(c, "500", "查询用户失败")
 		return
 	}
-	var hasLetter, hasDigit bool
-	for _, ch := range rawPwd {
-		switch {
-		case ch >= '0' && ch <= '9':
-			hasDigit = true
-		case (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'):
-			hasLetter = true
-		}
+	passwordPolicy, err := loadPasswordPolicy(c.Request.Context(), h.db)
+	if err != nil {
+		Fail(c, "500", "读取密码策略失败")
+		return
 	}
-	if !hasLetter || !hasDigit {
-		Fail(c, "400", "密码长度为 8-32 个字符，至少包含字母和数字")
+	if err := validatePassword(rawPwd, targetUsername, passwordPolicy); err != nil {
+		Fail(c, "400", err.Error())
+		return
+	}
+	used, err := passwordRecentlyUsed(
+		c.Request.Context(), h.db, security.BcryptVerifier{}, idVal, rawPwd, currentHash, passwordPolicy.RepetitionTimes,
+	)
+	if err != nil {
+		Fail(c, "500", "校验历史密码失败")
+		return
+	}
+	if used {
+		Fail(c, "400", fmt.Sprintf("不能使用最近 %d 次使用过的密码", passwordPolicy.RepetitionTimes))
 		return
 	}
 
@@ -939,14 +981,8 @@ func (h *SystemUserHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.db.ExecContext(
-		c.Request.Context(),
-		`UPDATE sys_user SET password = $1, pwd_reset_time = $2, update_user = $3, update_time = $4 WHERE id = $5`,
-		encodedPwd,
-		time.Now(),
-		userID,
-		time.Now(),
-		idVal,
+	if err := updatePasswordWithHistory(
+		c.Request.Context(), h.db, idVal, encodedPwd, currentHash, userID, passwordPolicy.RepetitionTimes,
 	); err != nil {
 		Fail(c, "500", "重置密码失败")
 		return
@@ -1112,45 +1148,321 @@ func safeCSVCell(value string) string {
 
 // DownloadImportTemplate handles GET /system/user/import/template.
 func (h *SystemUserHandler) DownloadImportTemplate(c *gin.Context) {
-	content := "username,nickname,gender,email,phone\n"
+	content := "username,nickname,password,gender,email,phone\nexample,示例用户,Example123!,1,example@example.com,13800000000\n"
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", "attachment; filename=\"user_import_template.csv\"")
-	c.String(http.StatusOK, content)
+	c.String(http.StatusOK, "\ufeff"+content)
 }
 
 // ParseImportUser handles POST /system/user/import/parse.
-// 当前实现不真正解析 Excel，只返回一个空的解析结果，保证前端流程可用。
 func (h *SystemUserHandler) ParseImportUser(c *gin.Context) {
-	// 接收上传文件，但不做实际解析
-	if _, err := c.FormFile("file"); err != nil {
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if h.redis == nil {
+		Fail(c, "500", "导入缓存服务未初始化")
+		return
+	}
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
 		Fail(c, "400", "文件不能为空")
 		return
 	}
-	resp := UserImportParseResp{
-		ImportKey:          strconv.FormatInt(time.Now().UnixNano(), 10),
-		TotalRows:          0,
-		ValidRows:          0,
-		DuplicateUserRows:  0,
-		DuplicateEmailRows: 0,
-		DuplicatePhoneRows: 0,
+	if !strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(filepathExt(fileHeader.Filename), ".")), "csv") {
+		Fail(c, "400", "仅支持 CSV 文件")
+		return
+	}
+	file, err := fileHeader.Open()
+	if err != nil {
+		Fail(c, "400", "读取导入文件失败")
+		return
+	}
+	defer file.Close()
+
+	rows, err := parseUserImportCSV(file)
+	if err != nil {
+		Fail(c, "400", err.Error())
+		return
+	}
+	if len(rows) == 0 {
+		Fail(c, "400", "导入文件没有数据")
+		return
+	}
+	if len(rows) > 5000 {
+		Fail(c, "400", "单次最多导入 5000 行")
+		return
+	}
+	policy, err := loadPasswordPolicy(c.Request.Context(), h.db)
+	if err != nil {
+		Fail(c, "500", "读取密码策略失败")
+		return
+	}
+
+	resp := UserImportParseResp{TotalRows: len(rows), ValidRows: len(rows)}
+	for index, row := range rows {
+		if err := validateUserImportRow(row, policy); err != nil {
+			Fail(c, "400", fmt.Sprintf("第 %d 行：%v", index+2, err))
+			return
+		}
+		var usernameExists, emailExists, phoneExists bool
+		if err := h.db.QueryRowContext(c.Request.Context(), `
+SELECT
+    EXISTS (SELECT 1 FROM sys_user WHERE username = $1),
+    ($2 <> '' AND EXISTS (SELECT 1 FROM sys_user WHERE email = $2)),
+    ($3 <> '' AND EXISTS (SELECT 1 FROM sys_user WHERE phone = $3))`, row.Username, row.Email, row.Phone).
+			Scan(&usernameExists, &emailExists, &phoneExists); err != nil {
+			Fail(c, "500", "校验导入数据失败")
+			return
+		}
+		if usernameExists {
+			resp.DuplicateUserRows++
+		}
+		if emailExists {
+			resp.DuplicateEmailRows++
+		}
+		if phoneExists {
+			resp.DuplicatePhoneRows++
+		}
+	}
+
+	payloadBytes, err := json.Marshal(userImportPayload{OwnerUserID: principal.UserID, DeptID: principal.DeptID, Rows: rows})
+	if err != nil {
+		Fail(c, "500", "保存导入数据失败")
+		return
+	}
+	resp.ImportKey = strconv.FormatInt(id.Next(), 10)
+	if err := h.redis.Set(c.Request.Context(), userImportRedisKey(resp.ImportKey), payloadBytes, 15*time.Minute).Err(); err != nil {
+		Fail(c, "500", "保存导入数据失败")
+		return
 	}
 	OK(c, resp)
 }
 
 // ImportUser handles POST /system/user/import.
-// 当前实现为占位实现，不执行真正的导入逻辑。
 func (h *SystemUserHandler) ImportUser(c *gin.Context) {
-	var body map[string]any
-	if err := c.ShouldBindJSON(&body); err != nil {
+	principal, ok := CurrentPrincipal(c)
+	if !ok {
+		Fail(c, "401", "未授权，请重新登录")
+		return
+	}
+	if h.redis == nil {
+		Fail(c, "500", "导入缓存服务未初始化")
+		return
+	}
+	var req userImportReq
+	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, "400", "请求参数不正确")
 		return
 	}
-	_ = body // 预留给未来扩展
-
-	resp := UserImportResultResp{
-		TotalRows:  0,
-		InsertRows: 0,
-		UpdateRows: 0,
+	if strings.TrimSpace(req.ImportKey) == "" {
+		Fail(c, "400", "请先解析导入文件")
+		return
 	}
+	if req.DuplicateUser < 1 || req.DuplicateUser > 3 || req.DuplicateEmail != 1 && req.DuplicateEmail != 3 || req.DuplicatePhone != 1 && req.DuplicatePhone != 3 {
+		Fail(c, "400", "导入策略不正确")
+		return
+	}
+	if req.DefaultStatus != 1 && req.DefaultStatus != 2 {
+		req.DefaultStatus = 1
+	}
+	payloadBytes, err := h.redis.Get(c.Request.Context(), userImportRedisKey(req.ImportKey)).Bytes()
+	if err == redis.Nil {
+		Fail(c, "400", "导入数据已过期，请重新上传")
+		return
+	}
+	if err != nil {
+		Fail(c, "500", "读取导入数据失败")
+		return
+	}
+	var payload userImportPayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil || payload.OwnerUserID != principal.UserID {
+		Fail(c, "403", "无权使用该导入数据")
+		return
+	}
+	if payload.DeptID == 0 {
+		Fail(c, "400", "当前用户未配置所属部门")
+		return
+	}
+
+	tx, err := h.db.BeginTx(c.Request.Context(), nil)
+	if err != nil {
+		Fail(c, "500", "开始导入失败")
+		return
+	}
+	defer tx.Rollback()
+	resp := UserImportResultResp{TotalRows: len(payload.Rows)}
+	for rowIndex, row := range payload.Rows {
+		usernameID, err := queryImportedUserID(c.Request.Context(), tx, "username", row.Username)
+		if err != nil {
+			Fail(c, "500", "校验用户名失败")
+			return
+		}
+		emailID, err := queryImportedUserID(c.Request.Context(), tx, "email", row.Email)
+		if err != nil {
+			Fail(c, "500", "校验邮箱失败")
+			return
+		}
+		phoneID, err := queryImportedUserID(c.Request.Context(), tx, "phone", row.Phone)
+		if err != nil {
+			Fail(c, "500", "校验手机号失败")
+			return
+		}
+		if emailID != 0 && emailID != usernameID {
+			if req.DuplicateEmail == 3 {
+				Fail(c, "409", fmt.Sprintf("第 %d 行邮箱已存在", rowIndex+2))
+				return
+			}
+			continue
+		}
+		if phoneID != 0 && phoneID != usernameID {
+			if req.DuplicatePhone == 3 {
+				Fail(c, "409", fmt.Sprintf("第 %d 行手机号已存在", rowIndex+2))
+				return
+			}
+			continue
+		}
+		if usernameID != 0 {
+			switch req.DuplicateUser {
+			case 1:
+				continue
+			case 3:
+				Fail(c, "409", fmt.Sprintf("第 %d 行用户名已存在", rowIndex+2))
+				return
+			case 2:
+				if _, err := tx.ExecContext(c.Request.Context(), `
+UPDATE sys_user
+SET nickname = $1, gender = $2, email = NULLIF($3, ''), phone = NULLIF($4, ''),
+    status = $5, update_user = $6, update_time = $7
+WHERE id = $8`, row.Nickname, row.Gender, row.Email, row.Phone, req.DefaultStatus, principal.UserID, time.Now(), usernameID); err != nil {
+					Fail(c, "500", "更新导入用户失败")
+					return
+				}
+				resp.UpdateRows++
+				continue
+			}
+		}
+
+		encodedPassword, err := h.hasher.Hash(row.Password)
+		if err != nil {
+			Fail(c, "500", "加密导入用户密码失败")
+			return
+		}
+		now := time.Now()
+		if _, err := tx.ExecContext(c.Request.Context(), `
+INSERT INTO sys_user (
+    id, username, nickname, password, gender, email, phone, status,
+    is_system, pwd_reset_time, dept_id, create_user, create_time
+) VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), $8,
+          FALSE, $9, $10, $11, $12)`,
+			id.Next(), row.Username, row.Nickname, encodedPassword, row.Gender, row.Email, row.Phone,
+			req.DefaultStatus, now, payload.DeptID, principal.UserID, now,
+		); err != nil {
+			Fail(c, "409", fmt.Sprintf("第 %d 行数据冲突，导入已取消", rowIndex+2))
+			return
+		}
+		resp.InsertRows++
+	}
+	if err := tx.Commit(); err != nil {
+		Fail(c, "500", "提交导入失败")
+		return
+	}
+	_ = h.redis.Del(c.Request.Context(), userImportRedisKey(req.ImportKey)).Err()
 	OK(c, resp)
+}
+
+func userImportRedisKey(importKey string) string {
+	return "USER_IMPORT:" + strings.TrimSpace(importKey)
+}
+
+func filepathExt(filename string) string {
+	filename = strings.TrimSpace(filename)
+	if index := strings.LastIndex(filename, "."); index >= 0 {
+		return filename[index:]
+	}
+	return ""
+}
+
+func parseUserImportCSV(reader io.Reader) ([]userImportRow, error) {
+	csvReader := csv.NewReader(reader)
+	csvReader.TrimLeadingSpace = true
+	csvReader.FieldsPerRecord = -1
+	records, err := csvReader.ReadAll()
+	if err != nil {
+		return nil, errors.New("CSV 文件格式不正确")
+	}
+	if len(records) == 0 {
+		return nil, errors.New("CSV 文件为空")
+	}
+	headers := records[0]
+	if len(headers) > 0 {
+		headers[0] = strings.TrimPrefix(headers[0], "\ufeff")
+	}
+	expected := []string{"username", "nickname", "password", "gender", "email", "phone"}
+	if len(headers) != len(expected) {
+		return nil, errors.New("CSV 表头不正确，请使用最新模板")
+	}
+	for index := range expected {
+		if !strings.EqualFold(strings.TrimSpace(headers[index]), expected[index]) {
+			return nil, errors.New("CSV 表头不正确，请使用最新模板")
+		}
+	}
+
+	rows := make([]userImportRow, 0, len(records)-1)
+	for index, record := range records[1:] {
+		if len(record) == 1 && strings.TrimSpace(record[0]) == "" {
+			continue
+		}
+		if len(record) != len(expected) {
+			return nil, fmt.Errorf("第 %d 行列数不正确", index+2)
+		}
+		gender, err := strconv.ParseInt(strings.TrimSpace(record[3]), 10, 16)
+		if err != nil {
+			return nil, fmt.Errorf("第 %d 行性别不正确", index+2)
+		}
+		rows = append(rows, userImportRow{
+			Username: strings.TrimSpace(record[0]),
+			Nickname: strings.TrimSpace(record[1]),
+			Password: strings.TrimSpace(record[2]),
+			Gender:   int16(gender),
+			Email:    strings.TrimSpace(record[4]),
+			Phone:    strings.TrimSpace(record[5]),
+		})
+	}
+	return rows, nil
+}
+
+func validateUserImportRow(row userImportRow, policy passwordPolicy) error {
+	if row.Username == "" || len([]rune(row.Username)) > 64 {
+		return errors.New("用户名不能为空且不能超过 64 个字符")
+	}
+	if row.Nickname == "" || len([]rune(row.Nickname)) > 30 {
+		return errors.New("昵称不能为空且不能超过 30 个字符")
+	}
+	if row.Gender < 0 || row.Gender > 2 {
+		return errors.New("性别只能为 0、1 或 2")
+	}
+	if row.Email != "" {
+		address, err := mail.ParseAddress(row.Email)
+		if err != nil || !strings.EqualFold(address.Address, row.Email) {
+			return errors.New("邮箱格式不正确")
+		}
+	}
+	if len(row.Phone) > 32 {
+		return errors.New("手机号不能超过 32 个字符")
+	}
+	return validatePassword(row.Password, row.Username, policy)
+}
+
+func queryImportedUserID(ctx context.Context, tx *sql.Tx, column, value string) (int64, error) {
+	if strings.TrimSpace(value) == "" {
+		return 0, nil
+	}
+	var userID int64
+	err := tx.QueryRowContext(ctx, `SELECT id FROM sys_user WHERE `+column+` = $1 LIMIT 1`, value).Scan(&userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return userID, err
 }

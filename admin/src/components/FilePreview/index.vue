@@ -47,13 +47,14 @@
 <script setup lang="ts">
 import type { FilePreview } from '@/components/FilePreview/type'
 import { Message } from '@arco-design/web-vue'
-import VueOfficeDocx from '@vue-office/docx'
-import VueOfficeExcel from '@vue-office/excel'
-import VueOfficePdf from '@vue-office/pdf'
 import { useWindowSize } from '@vueuse/core'
 import { ExcelTypes, WordTypes } from '@/constant/file'
 import '@vue-office/docx/lib/index.css'
 import '@vue-office/excel/lib/index.css'
+
+const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx'))
+const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel'))
+const VueOfficePdf = defineAsyncComponent(() => import('@vue-office/pdf'))
 
 const visible = ref<boolean>(false)
 const loading = ref<boolean>(false)

@@ -9,6 +9,8 @@ export interface UserInfo {
   avatar: string
   pwdResetTime: string
   pwdExpired: boolean
+  pwdExpireWarning: boolean
+  pwdExpireDays: number
   registrationDate: string
   deptName: string
   roles: string[]

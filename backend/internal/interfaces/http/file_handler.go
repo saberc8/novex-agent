@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -269,7 +270,10 @@ WHERE id = $1;
 
 // saveToLocal 将文件保存到本地目录，并返回哈希等信息。
 func saveToLocal(header *multipart.FileHeader, bucketPath, parentPath, storedName string) (fullPath, sha string, size int64, contentType string, err error) {
-	parentPath = normalizeParentPath(parentPath)
+	parentPath, err = normalizeParentPath(parentPath)
+	if err != nil {
+		return
+	}
 
 	// Full logical path stored in DB, e.g. /2025/1/1/123.jpg
 	if parentPath == "/" {
@@ -282,8 +286,10 @@ func saveToLocal(header *multipart.FileHeader, bucketPath, parentPath, storedNam
 	if strings.TrimSpace(bucketPath) == "" {
 		bucketPath = "./data/file"
 	}
-	relative := strings.TrimPrefix(fullPath, "/")
-	dstPath := filepath.Join(bucketPath, filepath.FromSlash(relative))
+	dstPath, err := safeLocalStoragePath(bucketPath, fullPath)
+	if err != nil {
+		return "", "", 0, "", err
+	}
 	if err = os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 		return
 	}
@@ -323,7 +329,10 @@ func saveToMinIO(ctx context.Context, header *multipart.FileHeader, storage *Sto
 		return
 	}
 
-	parentPath = normalizeParentPath(parentPath)
+	parentPath, err = normalizeParentPath(parentPath)
+	if err != nil {
+		return
+	}
 	if parentPath == "/" {
 		fullPath = "/" + storedName
 	} else {
@@ -400,20 +409,51 @@ func saveToMinIO(ctx context.Context, header *multipart.FileHeader, storage *Sto
 	return
 }
 
-// normalizeParentPath ensures parent path is in the form "/xxx/yyy" (no trailing slash).
-func normalizeParentPath(p string) string {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return "/"
+// normalizeParentPath validates a logical storage path and returns a clean,
+// slash-separated absolute path. Traversal and platform-specific separators
+// are rejected instead of being silently normalized.
+func normalizeParentPath(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "/" {
+		return "/", nil
 	}
-	if !strings.HasPrefix(p, "/") {
-		p = "/" + p
+	if strings.ContainsRune(raw, '\x00') || strings.Contains(raw, `\`) {
+		return "", fmt.Errorf("invalid parent path")
 	}
-	// Drop trailing slash except for root.
-	if len(p) > 1 {
-		p = strings.TrimRight(p, "/")
+	for _, segment := range strings.Split(raw, "/") {
+		if segment == ".." {
+			return "", fmt.Errorf("parent path traversal is not allowed")
+		}
 	}
-	return p
+	cleaned := path.Clean("/" + strings.TrimPrefix(raw, "/"))
+	if cleaned == "." {
+		return "/", nil
+	}
+	return cleaned, nil
+}
+
+func validateFileName(name string) error {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) || strings.ContainsRune(name, '\x00') {
+		return fmt.Errorf("invalid file name")
+	}
+	return nil
+}
+
+func safeLocalStoragePath(bucketPath, logicalPath string) (string, error) {
+	if strings.TrimSpace(bucketPath) == "" {
+		bucketPath = "./data/file"
+	}
+	root, err := filepath.Abs(bucketPath)
+	if err != nil {
+		return "", err
+	}
+	relative := filepath.FromSlash(strings.TrimPrefix(logicalPath, "/"))
+	candidate := filepath.Join(root, relative)
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("storage path escapes configured root")
+	}
+	return candidate, nil
 }
 
 func extensionFromFilename(name string) string {
@@ -451,9 +491,10 @@ func (h *FileHandler) UploadFile(c *gin.Context) {
 		Fail(c, "400", "文件不能为空")
 		return
 	}
-	parentPath := c.PostForm("parentPath")
-	if parentPath == "" {
-		parentPath = "/"
+	parentPath, err := normalizeParentPath(c.PostForm("parentPath"))
+	if err != nil {
+		Fail(c, "400", "文件路径不正确")
+		return
 	}
 
 	ext := extensionFromFilename(header.Filename)
@@ -513,7 +554,7 @@ INSERT INTO sys_file (
 		storedName,
 		header.Filename,
 		size,
-		normalizeParentPath(parentPath),
+		parentPath,
 		fullPath,
 		ext,
 		contentType,
@@ -576,8 +617,13 @@ func (h *FileHandler) ListFile(c *gin.Context) {
 	}
 
 	if parentPath != "" {
+		normalizedParentPath, err := normalizeParentPath(parentPath)
+		if err != nil {
+			Fail(c, "400", "文件路径不正确")
+			return
+		}
 		where += fmt.Sprintf(" AND f.parent_path = $%d", argPos)
-		args = append(args, normalizeParentPath(parentPath))
+		args = append(args, normalizedParentPath)
 		argPos++
 	}
 
@@ -722,13 +768,14 @@ func (h *FileHandler) CreateDir(c *gin.Context) {
 		return
 	}
 	req.OriginalName = strings.TrimSpace(req.OriginalName)
-	if req.OriginalName == "" {
-		Fail(c, "400", "名称不能为空")
+	if err := validateFileName(req.OriginalName); err != nil {
+		Fail(c, "400", "名称不正确")
 		return
 	}
-	parentPath := normalizeParentPath(req.ParentPath)
-	if parentPath == "" {
-		parentPath = "/"
+	parentPath, err := normalizeParentPath(req.ParentPath)
+	if err != nil {
+		Fail(c, "400", "文件路径不正确")
+		return
 	}
 
 	// Check duplicate folder name under same parent.
@@ -1144,8 +1191,10 @@ LIMIT 1;
 			if strings.TrimSpace(bucket) == "" {
 				bucket = "./data/file"
 			}
-			abs := filepath.Join(bucket, filepath.FromSlash(rel))
-			_ = os.Remove(abs)
+			abs, pathErr := safeLocalStoragePath(bucket, "/"+rel)
+			if pathErr == nil {
+				_ = os.Remove(abs)
+			}
 		}
 	}
 

@@ -1,32 +1,34 @@
 package auth
 
 import (
-	domain "voc-go-backend/internal/domain/user"
 	rbac "voc-go-backend/internal/domain/rbac"
+	domain "voc-go-backend/internal/domain/user"
 )
 
 // UserInfo is the shape returned by /auth/user/info,
 // aligned with the front-end's UserInfo type.
 type UserInfo struct {
-	ID              int64    `json:"id"`
-	Username        string   `json:"username"`
-	Nickname        string   `json:"nickname"`
-	Gender          int16    `json:"gender"`
-	Email           string   `json:"email"`
-	Phone           string   `json:"phone"`
-	Avatar          string   `json:"avatar"`
-	Description     string   `json:"description"`
-	PwdResetTime    string   `json:"pwdResetTime"`
-	PwdExpired      bool     `json:"pwdExpired"`
-	RegistrationDate string  `json:"registrationDate"`
-	DeptName        string   `json:"deptName"`
-	Roles           []string `json:"roles"`
-	Permissions     []string `json:"permissions"`
+	ID               int64    `json:"id"`
+	Username         string   `json:"username"`
+	Nickname         string   `json:"nickname"`
+	Gender           int16    `json:"gender"`
+	Email            string   `json:"email"`
+	Phone            string   `json:"phone"`
+	Avatar           string   `json:"avatar"`
+	Description      string   `json:"description"`
+	PwdResetTime     string   `json:"pwdResetTime"`
+	PwdExpired       bool     `json:"pwdExpired"`
+	PwdExpireWarning bool     `json:"pwdExpireWarning"`
+	PwdExpireDays    int      `json:"pwdExpireDays"`
+	RegistrationDate string   `json:"registrationDate"`
+	DeptName         string   `json:"deptName"`
+	Roles            []string `json:"roles"`
+	Permissions      []string `json:"permissions"`
 }
 
 // BuildUserInfo maps a domain.User to UserInfo.
 // roles and permissions are supplied by caller (RBAC layer).
-func BuildUserInfo(u *domain.User, roleCodes []string, permissions []string, deptName string, pwdExpired bool) UserInfo {
+func BuildUserInfo(u *domain.User, roleCodes []string, permissions []string, deptName string, pwdExpired, pwdExpireWarning bool, pwdExpireDays int) UserInfo {
 	var pwdResetTime string
 	if u.PwdResetTime != nil {
 		pwdResetTime = u.PwdResetTime.Format("2006-01-02 15:04:05")
@@ -58,6 +60,8 @@ func BuildUserInfo(u *domain.User, roleCodes []string, permissions []string, dep
 		Description:      desc,
 		PwdResetTime:     pwdResetTime,
 		PwdExpired:       pwdExpired,
+		PwdExpireWarning: pwdExpireWarning,
+		PwdExpireDays:    pwdExpireDays,
 		RegistrationDate: regDate,
 		DeptName:         deptName,
 		Roles:            roleCodes,

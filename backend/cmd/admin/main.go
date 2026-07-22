@@ -1,8 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,15 +53,16 @@ func main() {
 	}
 	defer redisClient.Close()
 
-	// 1.1 自动迁移/初始化数据库（仅 sys_user 和默认 admin）
+	// 1.1 自动迁移/初始化数据库及必要的基础数据。
 	if err := db.AutoMigrate(pg); err != nil {
 		log.Fatalf("failed to auto-migrate database: %v", err)
 	}
 
 	// 2. 初始化安全组件：RSA 解密器、BCrypt 密码校验、JWT 生成器
-	rsaKey := getenvDefault("AUTH_RSA_PRIVATE_KEY",
-		"MIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEAznV2Bi0zIX61NC3zSx8U6lJXbtru325pRV4Wt0aJXGxy6LMTsfxIye1ip+f2WnxrkYfk/X8YZ6FWNQPaAX/iRwIDAQABAkEAk/VcAusrpIqA5Ac2P5Tj0VX3cOuXmyouaVcXonr7f+6y2YTjLQuAnkcfKKocQI/juIRQBFQIqqW/m1nmz1wGeQIhAO8XaA/KxzOIgU0l/4lm0A2Wne6RokJ9HLs1YpOzIUmVAiEA3Q9DQrpAlIuiT1yWAGSxA9RxcjUM/1kdVLTkv0avXWsCIE0X8woEjK7lOSwzMG6RpEx9YHdopjViOj1zPVH61KTxAiBmv/dlhqkJ4rV46fIXELZur0pj6WC3N7a4brR8a+CLLQIhAMQyerWl2cPNVtE/8tkziHKbwW3ZUiBXU24wFxedT9iV",
-	)
+	rsaKey, err := loadRSAKey()
+	if err != nil {
+		log.Fatalf("failed to load RSA key: %v", err)
+	}
 	rsaDecryptor, err := security.NewRSADecryptorFromBase64(rsaKey)
 	if err != nil {
 		log.Fatalf("failed to init RSA decryptor: %v", err)
@@ -65,9 +70,13 @@ func main() {
 	pwdVerifier := security.BcryptVerifier{}
 	pwdHasher := security.BcryptHasher{}
 
-	jwtSecret := getenvDefault("AUTH_JWT_SECRET", "asdasdasifhueuiwyurfewbfjsdafjk")
+	jwtSecret, err := loadJWTSecret()
+	if err != nil {
+		log.Fatalf("failed to load JWT secret: %v", err)
+	}
 	tokenTTL := 24 * time.Hour
 	tokenSvc := security.NewTokenService(jwtSecret, tokenTTL)
+	tokenSvc.SetSessionStore(security.NewRedisTokenSessionStore(redisClient))
 
 	// 3. 初始化领域仓储和应用服务
 	var userRepo user.Repository = persistence.NewPgRepository(pg)
@@ -77,6 +86,8 @@ func main() {
 
 	// 4. 初始化 HTTP 服务（Gin）
 	r := gin.Default()
+	maxRequestBodyBytes := getenvInt64Default("HTTP_MAX_REQUEST_BODY_BYTES", 32<<20)
+	r.MaxMultipartMemory = 8 << 20
 	allowedOrigins := parseAllowedOrigins(getenvDefault(
 		"HTTP_CORS_ALLOWED_ORIGINS",
 		"http://localhost:8202,http://127.0.0.1:8202,http://localhost:8203,http://127.0.0.1:8203",
@@ -101,13 +112,15 @@ func main() {
 
 		c.Next()
 	})
+	r.Use(httpif.MaxRequestBodySize(maxRequestBodyBytes))
 
 	// 系统操作日志中间件：在业务处理前后统一记录 sys_log。
 	sysLogRepo := syslogp.NewPgRepository(pg)
 	r.Use(httpif.NewSysLogMiddleware(sysLogRepo, tokenSvc))
 
-	// 在线用户内存存储（仅当前进程有效）
-	onlineStore := httpif.NewOnlineStore()
+	// 在线列表用于展示；鉴权、闲置超时和会话撤销由 Redis 统一维护。
+	onlineStore := httpif.NewRedisOnlineStore(redisClient, tokenSvc)
+	r.Use(httpif.NewOnlineActivityMiddleware(onlineStore))
 
 	// 公共接口：站点基础配置、公开字典、验证码、登录、静态文件和 Swagger。
 	commonHandler := httpif.NewCommonHandler(pg)
@@ -118,7 +131,7 @@ func main() {
 	captchaHandler.RegisterCaptchaRoutes(r)
 
 	// 登录接口保持公开，登出和用户信息在 RBAC 中间件之后注册。
-	authHandler := httpif.NewAuthHandler(authSvc, onlineStore, pg, redisClient)
+	authHandler := httpif.NewAuthHandler(authSvc, onlineStore, pg, redisClient, tokenSvc)
 	authHandler.RegisterPublicAuthRoutes(r)
 
 	// H5 consumer auth uses an independent user table and token subject.
@@ -167,7 +180,7 @@ func main() {
 	deptHandler.RegisterDeptRoutes(r)
 
 	// 系统管理：用户管理
-	systemUserHandler := httpif.NewSystemUserHandler(pg, tokenSvc, rsaDecryptor, pwdHasher)
+	systemUserHandler := httpif.NewSystemUserHandler(pg, tokenSvc, rsaDecryptor, pwdHasher, redisClient)
 	systemUserHandler.RegisterSystemUserRoutes(r)
 
 	// 系统管理：字典管理
@@ -210,6 +223,19 @@ func getenvDefault(key, def string) string {
 	return def
 }
 
+func getenvInt64Default(key string, def int64) int64 {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return def
+	}
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || parsed <= 0 {
+		log.Printf("[config] invalid %s=%q; using %d", key, value, def)
+		return def
+	}
+	return parsed
+}
+
 func parseAllowedOrigins(raw string) map[string]struct{} {
 	origins := make(map[string]struct{})
 	for _, item := range strings.Split(raw, ",") {
@@ -219,4 +245,34 @@ func parseAllowedOrigins(raw string) map[string]struct{} {
 		}
 	}
 	return origins
+}
+
+func loadRSAKey() (string, error) {
+	if key := strings.TrimSpace(os.Getenv("AUTH_RSA_PRIVATE_KEY")); key != "" {
+		return key, nil
+	}
+	return "", fmt.Errorf("AUTH_RSA_PRIVATE_KEY is required")
+}
+
+func loadJWTSecret() (string, error) {
+	if secret := strings.TrimSpace(os.Getenv("AUTH_JWT_SECRET")); secret != "" {
+		if len(secret) < 32 {
+			return "", fmt.Errorf("AUTH_JWT_SECRET must contain at least 32 characters")
+		}
+		return secret, nil
+	}
+	if isProduction() {
+		return "", fmt.Errorf("AUTH_JWT_SECRET is required when APP_ENV=production")
+	}
+	randomBytes := make([]byte, 32)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("generate development JWT secret: %w", err)
+	}
+	log.Print("[security] AUTH_JWT_SECRET is unset; generated an ephemeral development secret")
+	return base64.RawURLEncoding.EncodeToString(randomBytes), nil
+}
+
+func isProduction() bool {
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	return env == "production" || env == "prod"
 }

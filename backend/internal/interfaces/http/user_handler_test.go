@@ -59,6 +59,43 @@ func TestGetUserInfoIncludesDeptNameAndPwdExpired(t *testing.T) {
 	}
 }
 
+func TestGetUserInfoIncludesPasswordExpirationWarning(t *testing.T) {
+	resetTime := time.Now().AddDate(0, 0, -28)
+	user := &domainuser.User{
+		ID:           8,
+		Username:     "warning-user",
+		Nickname:     "提醒用户",
+		Password:     "old-password",
+		Status:       1,
+		DeptID:       10,
+		PwdResetTime: &resetTime,
+		CreateTime:   time.Now().AddDate(0, -1, 0),
+	}
+	router, _ := newUserHandlerTestRouter(t, user, &userHandlerTestStore{
+		deptNames: map[int64]string{10: "研发部"},
+		passwordOptions: map[string]string{
+			"PASSWORD_EXPIRATION_DAYS":         "30",
+			"PASSWORD_EXPIRATION_WARNING_DAYS": "3",
+		},
+	})
+
+	resp := performUserHandlerRequest(router, nethttp.MethodGet, "/auth/user/info", "")
+	assertBusinessCode(t, resp, "200")
+	var body struct {
+		Data struct {
+			PwdExpired       bool `json:"pwdExpired"`
+			PwdExpireWarning bool `json:"pwdExpireWarning"`
+			PwdExpireDays    int  `json:"pwdExpireDays"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body.Data.PwdExpired || !body.Data.PwdExpireWarning || body.Data.PwdExpireDays < 1 || body.Data.PwdExpireDays > 3 {
+		t.Fatalf("unexpected password expiry state: %+v", body.Data)
+	}
+}
+
 func TestUserProfileUpdatesBasicInfoAndPassword(t *testing.T) {
 	resetTime := time.Now().AddDate(0, 0, -1)
 	user := &domainuser.User{
@@ -87,11 +124,11 @@ func TestUserProfileUpdatesBasicInfoAndPassword(t *testing.T) {
 
 	passwordResp := performUserHandlerRequest(router, nethttp.MethodPatch, "/user/profile/password", `{
 		"oldPassword":"old-password",
-		"newPassword":"new-password"
+		"newPassword":"new-password1"
 	}`)
 	assertBusinessCode(t, passwordResp, "200")
-	if store.password != "hashed:new-password" {
-		t.Fatalf("password = %q, want hashed:new-password", store.password)
+	if store.password != "hashed:new-password1" {
+		t.Fatalf("password = %q, want hashed:new-password1", store.password)
 	}
 	if store.pwdResetTime.IsZero() {
 		t.Fatal("pwdResetTime was not updated")

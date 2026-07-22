@@ -47,6 +47,21 @@ const handleError = (msg: string) => {
   })
 }
 
+const handleUnauthorized = (msg: string) => {
+  modalErrorWrapper({
+    title: '提示',
+    content: msg || '未授权，请重新登录',
+    maskClosable: false,
+    escToClose: false,
+    okText: '重新登录',
+    async onOk() {
+      const userStore = useUserStore()
+      await userStore.logoutCallBack()
+      await router.replace('/login')
+    },
+  })
+}
+
 // 请求拦截器
 http.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -88,18 +103,7 @@ http.interceptors.response.use(
 
     // Token 失效
     if (code === '401' && response.config.url !== '/auth/user/info') {
-      modalErrorWrapper({
-        title: '提示',
-        content: msg,
-        maskClosable: false,
-        escToClose: false,
-        okText: '重新登录',
-        async onOk() {
-          const userStore = useUserStore()
-          await userStore.logoutCallBack()
-          await router.replace('/login')
-        },
-      })
+      handleUnauthorized(msg)
     } else {
       handleError(msg)
     }
@@ -111,9 +115,14 @@ http.interceptors.response.use(
       return Promise.reject(error)
     }
     const status = error.response?.status
-    const errorMsg = StatusCodeMessage[status] || '服务器暂时未响应，请刷新页面并重试。若无法解决，请联系管理员'
-    handleError(errorMsg)
-    return Promise.reject(error)
+    const body = error.response?.data as Partial<ApiRes<unknown>> | undefined
+    const errorMsg = body?.msg || StatusCodeMessage[status] || '服务器暂时未响应，请刷新页面并重试。若无法解决，请联系管理员'
+    if ((status === 401 || body?.code === '401') && error.config?.url !== '/auth/user/info') {
+      handleUnauthorized(errorMsg)
+    } else {
+      handleError(errorMsg)
+    }
+    return Promise.reject(new Error(errorMsg))
   },
 )
 

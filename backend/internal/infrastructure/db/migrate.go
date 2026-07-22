@@ -1,6 +1,13 @@
 package db
 
-import "database/sql"
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"strings"
+
+	"golang.org/x/crypto/bcrypt"
+)
 
 // AutoMigrate performs minimal automatic migrations required for the Go service
 // to work, focusing on the sys_user table and a default admin account.
@@ -14,6 +21,9 @@ func AutoMigrate(database *sql.DB) error {
 	}
 
 	if err := ensureSysUser(database); err != nil {
+		return err
+	}
+	if err := ensureSysUserPasswordHistory(database); err != nil {
 		return err
 	}
 	if err := ensureSysRole(database); err != nil {
@@ -58,14 +68,23 @@ func AutoMigrate(database *sql.DB) error {
 	if err := ensureSysClient(database); err != nil {
 		return err
 	}
-	if err := cleanupLegacyReactInitialization(database); err != nil {
-		return err
-	}
-	if err := cleanupUnmappedFilePermissions(database); err != nil {
-		return err
-	}
 
 	return nil
+}
+
+func ensureSysUserPasswordHistory(db *sql.DB) error {
+	const ddl = `
+CREATE TABLE IF NOT EXISTS sys_user_password_history (
+    id          BIGINT       PRIMARY KEY,
+    user_id     BIGINT       NOT NULL,
+    password    VARCHAR(255) NOT NULL,
+    create_time TIMESTAMP    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_password_history_user_time
+    ON sys_user_password_history (user_id, create_time DESC);
+`
+	_, err := db.Exec(ddl)
+	return err
 }
 
 func ensureSysUser(db *sql.DB) error {
@@ -108,8 +127,34 @@ CREATE INDEX IF NOT EXISTS idx_user_update_user    ON sys_user (update_user);
 		}
 	}
 
+	var existingAdmin int
+	err := db.QueryRow(`SELECT 1 FROM sys_user WHERE username = 'admin' LIMIT 1;`).Scan(&existingAdmin)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+
+	bootstrapPassword := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"))
+	appEnv := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	production := appEnv == "production" || appEnv == "prod"
+	if bootstrapPassword == "" {
+		if production {
+			return fmt.Errorf("BOOTSTRAP_ADMIN_PASSWORD is required when creating the initial admin in production")
+		}
+		bootstrapPassword = "admin123"
+	}
+	if len(bootstrapPassword) < 8 {
+		return fmt.Errorf("BOOTSTRAP_ADMIN_PASSWORD must contain at least 8 characters")
+	}
+	encodedPassword, err := bcrypt.GenerateFromPassword([]byte(bootstrapPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash bootstrap admin password: %w", err)
+	}
+
 	const seedAdmin = `
-INSERT INTO sys_user (
+	INSERT INTO sys_user (
     id, username, nickname, password, gender, email, phone, avatar,
     description, status, is_system, pwd_reset_time, dept_id, create_user, create_time
 )
@@ -117,7 +162,7 @@ SELECT
     1,
     'admin',
     '系统管理员',
-    '{bcrypt}$2a$10$4jGwK2BMJ7FgVR.mgwGodey8.xR8FLoU1XSXpxJ9nZQt.pufhasSa',
+	    $1,
     1,
     NULL,
     NULL,
@@ -129,9 +174,9 @@ SELECT
     1,
     1,
     NOW()
-WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin');
-`
-	if _, err := db.Exec(seedAdmin); err != nil {
+	WHERE NOT EXISTS (SELECT 1 FROM sys_user WHERE username = 'admin');
+	`
+	if _, err := db.Exec(seedAdmin, "{bcrypt}"+string(encodedPassword)); err != nil {
 		return err
 	}
 	return nil
@@ -903,8 +948,6 @@ UPDATE sys_menu
        update_time = NOW()
  WHERE id IN (1141, 1142, 1143, 1144, 1145);
 
-DELETE FROM sys_role_menu WHERE menu_id = 1140;
-DELETE FROM sys_menu WHERE id = 1140;
 `
 	if _, err := db.Exec(seedMenus); err != nil {
 		return err
@@ -1233,100 +1276,6 @@ CREATE INDEX IF NOT EXISTS idx_client_user_status ON client_user (status);
 	return err
 }
 
-// cleanupLegacyReactInitialization removes frontend seed data that belonged to
-// older React/Next/JSX/TSX adapters. The Go backend only seeds and serves the
-// Vue3 admin now, so this keeps existing databases aligned after upgrades.
-func cleanupLegacyReactInitialization(db *sql.DB) error {
-	const deleteRoleMenus = `
-WITH RECURSIVE legacy_frontend_menus AS (
-    SELECT id
-    FROM sys_menu
-    WHERE COALESCE(title, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(path, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(name, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(component, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(redirect, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(permission, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-    UNION
-    SELECT child.id
-    FROM sys_menu AS child
-    JOIN legacy_frontend_menus AS parent ON child.parent_id = parent.id
-)
-DELETE FROM sys_role_menu AS rm
-USING legacy_frontend_menus AS m
-WHERE rm.menu_id = m.id;
-`
-	if _, err := db.Exec(deleteRoleMenus); err != nil {
-		return err
-	}
-
-	const deleteMenus = `
-WITH RECURSIVE legacy_frontend_menus AS (
-    SELECT id
-    FROM sys_menu
-    WHERE COALESCE(title, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(path, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(name, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(component, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(redirect, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       OR COALESCE(permission, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-    UNION
-    SELECT child.id
-    FROM sys_menu AS child
-    JOIN legacy_frontend_menus AS parent ON child.parent_id = parent.id
-)
-DELETE FROM sys_menu AS m
-USING legacy_frontend_menus AS legacy
-WHERE m.id = legacy.id;
-`
-	if _, err := db.Exec(deleteMenus); err != nil {
-		return err
-	}
-
-	const deleteDictItems = `
-DELETE FROM sys_dict_item
-WHERE COALESCE(label, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR COALESCE(value, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR COALESCE(description, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%']);
-`
-	if _, err := db.Exec(deleteDictItems); err != nil {
-		return err
-	}
-
-	const deleteOptions = `
-DELETE FROM sys_option
-WHERE COALESCE(category, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR COALESCE(name, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR COALESCE(code, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR (
-       (
-           COALESCE(category, '') ILIKE ANY (ARRAY['%frontend%', '%front-end%', '%framework%', '%adapter%', '%template%', '%前端%', '%框架%', '%适配%', '%模板%'])
-        OR COALESCE(name, '') ILIKE ANY (ARRAY['%frontend%', '%front-end%', '%framework%', '%adapter%', '%template%', '%前端%', '%框架%', '%适配%', '%模板%'])
-        OR COALESCE(code, '') ILIKE ANY (ARRAY['%frontend%', '%front-end%', '%framework%', '%adapter%', '%template%'])
-       )
-       AND (
-           COALESCE(value, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-        OR COALESCE(default_value, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-        OR COALESCE(description, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-       )
-   );
-`
-	if _, err := db.Exec(deleteOptions); err != nil {
-		return err
-	}
-
-	const deleteClients = `
-DELETE FROM sys_client
-WHERE COALESCE(client_id, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR COALESCE(client_type, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%'])
-   OR COALESCE(auth_type::text, '') ILIKE ANY (ARRAY['%react%', '%next.js%', '%nextjs%', '%tsx%', '%jsx%']);
-`
-	if _, err := db.Exec(deleteClients); err != nil {
-		return err
-	}
-	return nil
-}
-
 func ensureSysRoleMenu(db *sql.DB) error {
 	const checkTable = `SELECT to_regclass('public.sys_role_menu');`
 	var tableName sql.NullString
@@ -1355,28 +1304,6 @@ WHERE NOT EXISTS (
 );
 `
 	if _, err := db.Exec(bindAllMenus); err != nil {
-		return err
-	}
-	return nil
-}
-
-func cleanupUnmappedFilePermissions(db *sql.DB) error {
-	const stalePermissions = `'system:file:get', 'system:file:download'`
-	const deleteRoleMenus = `
-DELETE FROM sys_role_menu AS rm
-USING sys_menu AS m
-WHERE rm.menu_id = m.id
-  AND m.permission IN (` + stalePermissions + `);
-`
-	if _, err := db.Exec(deleteRoleMenus); err != nil {
-		return err
-	}
-
-	const deleteMenus = `
-DELETE FROM sys_menu
-WHERE permission IN (` + stalePermissions + `);
-`
-	if _, err := db.Exec(deleteMenus); err != nil {
 		return err
 	}
 	return nil

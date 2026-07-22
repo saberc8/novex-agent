@@ -24,16 +24,25 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-http.interceptors.response.use((response) => {
-  const body = response.data as ApiResponse<unknown>
-  if (body?.code === '401') {
-    clearClientToken()
-  }
-  if (body?.code && body.code !== '200') {
-    return Promise.reject(new Error(body.msg || '请求失败'))
-  }
-  return response
-})
+http.interceptors.response.use(
+  (response) => {
+    const body = response.data as ApiResponse<unknown>
+    if (body?.code === '401') {
+      clearClientToken()
+    }
+    if (body?.code && body.code !== '200') {
+      return Promise.reject(new Error(body.msg || '请求失败'))
+    }
+    return response
+  },
+  (error) => {
+    const body = error.response?.data as Partial<ApiResponse<unknown>> | undefined
+    if (error.response?.status === 401 || body?.code === '401') {
+      clearClientToken()
+    }
+    return Promise.reject(new Error(body?.msg || error.message || '请求失败'))
+  },
+)
 
 export async function post<T, D = unknown>(url: string, data?: D) {
   const response = await http.post<ApiResponse<T>>(url, data)

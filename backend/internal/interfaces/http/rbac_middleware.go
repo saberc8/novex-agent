@@ -85,7 +85,7 @@ func loadPrincipal(ctx context.Context, db *sql.DB, tokenSvc *security.TokenServ
 	if db == nil || tokenSvc == nil {
 		return nil, errors.New("rbac dependency is nil")
 	}
-	claims, err := tokenSvc.Parse(authz)
+	claims, err := tokenSvc.ParseContext(ctx, authz)
 	if err != nil || claims.UserID == 0 {
 		return nil, errors.New("invalid token")
 	}

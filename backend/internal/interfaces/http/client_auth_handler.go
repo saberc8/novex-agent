@@ -72,10 +72,10 @@ func NewClientAuthHandler(
 func (h *ClientAuthHandler) RegisterPublicClientRoutes(r gin.IRoutes) {
 	r.POST("/client/auth/register", h.Register)
 	r.POST("/client/auth/login", h.Login)
-	r.POST("/client/auth/logout", h.Logout)
 }
 
 func (h *ClientAuthHandler) RegisterProtectedClientRoutes(r gin.IRoutes) {
+	r.POST("/client/auth/logout", h.Logout)
 	r.GET("/client/user/profile", h.Profile)
 }
 
@@ -93,7 +93,8 @@ func (h *ClientAuthHandler) Register(c *gin.Context) {
 		Fail(c, "400", err.Error())
 		return
 	}
-	if !h.isActiveH5AccountClient(c, req.ClientID) {
+	policy, err := loadClientSessionPolicy(c.Request.Context(), h.db, req.ClientID, "H5")
+	if err != nil {
 		Fail(c, "400", "客户端不可用")
 		return
 	}
@@ -121,9 +122,13 @@ INSERT INTO client_user (
 		Fail(c, "500", "注册失败")
 		return
 	}
-	token, err := h.tokenSvc.GenerateForSubject(userID, security.SubjectClient)
+	token, err := h.tokenSvc.GenerateForSubjectWithTTL(userID, security.SubjectClient, policy.TokenTTL)
 	if err != nil {
 		Fail(c, "500", "生成登录令牌失败")
+		return
+	}
+	if err := h.tokenSvc.RegisterSession(c.Request.Context(), token, policy.ActiveTimeout); err != nil {
+		Fail(c, "500", "创建登录会话失败")
 		return
 	}
 	OK(c, clientLoginResp{
@@ -147,7 +152,8 @@ func (h *ClientAuthHandler) Login(c *gin.Context) {
 		Fail(c, "400", err.Error())
 		return
 	}
-	if !h.isActiveH5AccountClient(c, req.ClientID) {
+	policy, err := loadClientSessionPolicy(c.Request.Context(), h.db, req.ClientID, "H5")
+	if err != nil {
 		Fail(c, "400", "客户端不可用")
 		return
 	}
@@ -175,9 +181,13 @@ func (h *ClientAuthHandler) Login(c *gin.Context) {
 	}
 	const updateLoginSQL = `UPDATE client_user SET last_login_time = NOW(), update_time = NOW() WHERE id = $1;`
 	_, _ = h.db.ExecContext(c.Request.Context(), updateLoginSQL, user.ID)
-	token, err := h.tokenSvc.GenerateForSubject(user.ID, security.SubjectClient)
+	token, err := h.tokenSvc.GenerateForSubjectWithTTL(user.ID, security.SubjectClient, policy.TokenTTL)
 	if err != nil {
 		Fail(c, "500", "生成登录令牌失败")
+		return
+	}
+	if err := h.tokenSvc.RegisterSession(c.Request.Context(), token, policy.ActiveTimeout); err != nil {
+		Fail(c, "500", "创建登录会话失败")
 		return
 	}
 	OK(c, clientLoginResp{
@@ -190,6 +200,10 @@ func (h *ClientAuthHandler) Login(c *gin.Context) {
 }
 
 func (h *ClientAuthHandler) Logout(c *gin.Context) {
+	if err := h.tokenSvc.RevokeSession(c.Request.Context(), c.GetHeader("Authorization")); err != nil {
+		Fail(c, "500", "退出登录失败")
+		return
+	}
 	OK(c, true)
 }
 
@@ -234,25 +248,6 @@ func validateClientLoginReq(req clientLoginReq) error {
 		return errors.New("密码不能为空")
 	}
 	return nil
-}
-
-func (h *ClientAuthHandler) isActiveH5AccountClient(c *gin.Context, clientID string) bool {
-	if h.db == nil {
-		return false
-	}
-	const query = `
-SELECT COUNT(1)
-FROM sys_client
-WHERE client_id = $1
-  AND client_type = 'H5'
-  AND status = 1
-  AND auth_type::text ILIKE '%ACCOUNT%';
-`
-	var count int64
-	if err := h.db.QueryRowContext(c.Request.Context(), query, clientID).Scan(&count); err != nil {
-		return false
-	}
-	return count > 0
 }
 
 func (h *ClientAuthHandler) findClientUserByPhone(c *gin.Context, phone string) (*clientUserRecord, error) {

@@ -98,13 +98,16 @@ func (h *UserHandler) GetUserInfo(c *gin.Context) {
 		Fail(c, "500", "获取部门信息失败")
 		return
 	}
-	pwdExpired, err := h.isPasswordExpired(c, domainUser.PwdResetTime)
+	pwdExpiry, err := h.loadPasswordExpiry(c, domainUser.PwdResetTime)
 	if err != nil {
 		Fail(c, "500", "获取密码策略失败")
 		return
 	}
 
-	info := appauth.BuildUserInfo(domainUser, roleCodes, perms, deptName, pwdExpired)
+	info := appauth.BuildUserInfo(
+		domainUser, roleCodes, perms, deptName,
+		pwdExpiry.Expired, pwdExpiry.Warning, pwdExpiry.DaysRemaining,
+	)
 	OK(c, info)
 }
 
@@ -266,10 +269,6 @@ func (h *UserHandler) UpdatePassword(c *gin.Context) {
 		Fail(c, "400", "密码不能为空")
 		return
 	}
-	if len(newPassword) < 6 {
-		Fail(c, "400", "密码长度不能小于 6 位")
-		return
-	}
 	if oldPassword == newPassword {
 		Fail(c, "400", "新密码与旧密码不能相同")
 		return
@@ -292,27 +291,35 @@ func (h *UserHandler) UpdatePassword(c *gin.Context) {
 		Fail(c, "400", "当前密码不正确")
 		return
 	}
+	passwordPolicy, err := loadPasswordPolicy(c.Request.Context(), h.db)
+	if err != nil {
+		Fail(c, "500", "读取密码策略失败")
+		return
+	}
+	if err := validatePassword(newPassword, domainUser.Username, passwordPolicy); err != nil {
+		Fail(c, "400", err.Error())
+		return
+	}
+	used, err := passwordRecentlyUsed(
+		c.Request.Context(), h.db, h.verifier, userID, newPassword, domainUser.Password, passwordPolicy.RepetitionTimes,
+	)
+	if err != nil {
+		Fail(c, "500", "校验历史密码失败")
+		return
+	}
+	if used {
+		Fail(c, "400", fmt.Sprintf("不能使用最近 %d 次使用过的密码", passwordPolicy.RepetitionTimes))
+		return
+	}
 	encoded, err := h.hasher.Hash(newPassword)
 	if err != nil {
 		Fail(c, "500", "密码加密失败")
 		return
 	}
-	now := time.Now()
-	result, err := h.db.ExecContext(
-		c.Request.Context(),
-		`UPDATE sys_user SET password = $1, pwd_reset_time = $2, update_user = $3, update_time = $4 WHERE id = $5`,
-		encoded,
-		now,
-		userID,
-		now,
-		userID,
-	)
-	if err != nil {
+	if err := updatePasswordWithHistory(
+		c.Request.Context(), h.db, userID, encoded, domainUser.Password, userID, passwordPolicy.RepetitionTimes,
+	); err != nil {
 		Fail(c, "500", "修改密码失败")
-		return
-	}
-	if affected, err := result.RowsAffected(); err == nil && affected == 0 {
-		Fail(c, "404", "用户不存在")
 		return
 	}
 	OK(c, true)
@@ -354,33 +361,51 @@ func (h *UserHandler) loadDeptName(c *gin.Context, deptID int64) (string, error)
 	return name.String, nil
 }
 
-func (h *UserHandler) isPasswordExpired(c *gin.Context, pwdResetTime *time.Time) (bool, error) {
+type passwordExpiryState struct {
+	Expired       bool
+	Warning       bool
+	DaysRemaining int
+}
+
+func (h *UserHandler) loadPasswordExpiry(c *gin.Context, pwdResetTime *time.Time) (passwordExpiryState, error) {
 	if h.db == nil || pwdResetTime == nil {
-		return false, nil
+		return passwordExpiryState{}, nil
 	}
-	var raw sql.NullString
-	err := h.db.QueryRowContext(
-		c.Request.Context(),
-		`SELECT COALESCE(value, default_value, '0') FROM sys_option WHERE code = $1 LIMIT 1`,
-		"PASSWORD_EXPIRATION_DAYS",
-	).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
+	expirationValue, found, err := loadPasswordOption(c.Request.Context(), h.db, "PASSWORD_EXPIRATION_DAYS")
 	if err != nil {
-		return false, err
+		return passwordExpiryState{}, err
 	}
-	if !raw.Valid || strings.TrimSpace(raw.String) == "" {
-		return false, nil
+	if !found || expirationValue == "" {
+		return passwordExpiryState{}, nil
 	}
-	days, err := strconv.Atoi(strings.TrimSpace(raw.String))
+	days, err := strconv.Atoi(expirationValue)
 	if err != nil {
-		return false, err
+		return passwordExpiryState{}, err
 	}
 	if days <= 0 {
-		return false, nil
+		return passwordExpiryState{}, nil
 	}
-	return !time.Now().Before(pwdResetTime.AddDate(0, 0, days)), nil
+	expiresAt := pwdResetTime.AddDate(0, 0, days)
+	remaining := time.Until(expiresAt)
+	if remaining <= 0 {
+		return passwordExpiryState{Expired: true}, nil
+	}
+	daysRemaining := int((remaining + 24*time.Hour - 1) / (24 * time.Hour))
+	warningValue, found, err := loadPasswordOption(c.Request.Context(), h.db, "PASSWORD_EXPIRATION_WARNING_DAYS")
+	if err != nil {
+		return passwordExpiryState{}, err
+	}
+	warningDays := 0
+	if found && warningValue != "" {
+		warningDays, err = strconv.Atoi(warningValue)
+		if err != nil {
+			return passwordExpiryState{}, err
+		}
+	}
+	return passwordExpiryState{
+		Warning:       warningDays > 0 && daysRemaining <= warningDays,
+		DaysRemaining: daysRemaining,
+	}, nil
 }
 
 func (h *UserHandler) saveAvatarFile(c *gin.Context, userID int64, file *multipart.FileHeader) (string, error) {

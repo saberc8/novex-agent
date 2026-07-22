@@ -39,7 +39,7 @@ func NewSysLogMiddleware(repo syslog.Repository, tokenSvc *security.TokenService
 type bodyCaptureWriter struct {
 	gin.ResponseWriter
 	status int
-	body   bytes.Buffer
+	body   cappedBuffer
 }
 
 func (w *bodyCaptureWriter) WriteHeader(code int) {
@@ -55,6 +55,27 @@ func (w *bodyCaptureWriter) Write(b []byte) (int, error) {
 	return w.ResponseWriter.Write(b)
 }
 
+type cappedBuffer struct {
+	bytes.Buffer
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	originalLength := len(p)
+	remaining := maxLogBodyLength - b.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			p = p[:remaining]
+		}
+		_, _ = b.Buffer.Write(p)
+	}
+	return originalLength, nil
+}
+
+type teeReadCloser struct {
+	io.Reader
+	io.Closer
+}
+
 // handle 是实际的中间件逻辑。
 func (m *sysLogMiddleware) handle(c *gin.Context) {
 	// 仅记录业务请求，跳过浏览器预检。
@@ -66,11 +87,13 @@ func (m *sysLogMiddleware) handle(c *gin.Context) {
 	start := time.Now()
 
 	// 读取并保留请求体，避免影响后续 handler。
-	var reqBody []byte
-	if c.Request.Body != nil {
-		data, _ := io.ReadAll(c.Request.Body)
-		reqBody = data
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(data))
+	var requestCapture cappedBuffer
+	if c.Request.Body != nil && !strings.Contains(strings.ToLower(c.ContentType()), "multipart/form-data") {
+		originalBody := c.Request.Body
+		c.Request.Body = &teeReadCloser{
+			Reader: io.TeeReader(originalBody, &requestCapture),
+			Closer: originalBody,
+		}
 	}
 
 	// 包装响应 writer，捕获状态码与响应内容。
@@ -80,6 +103,11 @@ func (m *sysLogMiddleware) handle(c *gin.Context) {
 
 	// 执行后续处理。
 	c.Next()
+	// 部分处理器不会主动读取请求体；此时在请求结束后继续消费剩余内容，
+	// 由 cappedBuffer 保证审计日志最多保留固定长度。
+	if c.Request.Body != nil {
+		_, _ = io.Copy(io.Discard, c.Request.Body)
+	}
 
 	duration := time.Since(start)
 
@@ -98,7 +126,7 @@ func (m *sysLogMiddleware) handle(c *gin.Context) {
 		RequestURL:     c.Request.URL.String(),
 		RequestMethod:  c.Request.Method,
 		RequestHeaders: marshalHeaders(c.Request.Header),
-		RequestBody:    sanitizeLogPayload(reqBody, c.ContentType()),
+		RequestBody:    sanitizeLogPayload(requestCapture.Bytes(), c.ContentType()),
 		StatusCode:     statusFromWriter(cw),
 		ResponseHeaders: marshalHeaders(
 			http.Header(cw.Header()),
@@ -122,7 +150,7 @@ func (m *sysLogMiddleware) handle(c *gin.Context) {
 	// 从 Authorization 头解析登录用户 ID。
 	if m.tokenSvc != nil {
 		if authz := c.GetHeader("Authorization"); authz != "" {
-			if claims, err := m.tokenSvc.Parse(authz); err == nil && claims.UserID != 0 {
+			if claims, err := m.tokenSvc.ParseContext(c.Request.Context(), authz); err == nil && claims.UserID != 0 {
 				uid := claims.UserID
 				rec.CreateUser = &uid
 			}
@@ -157,7 +185,7 @@ func marshalHeaders(h http.Header) string {
 	if err != nil {
 		return ""
 	}
-	return string(b)
+	return truncateString(string(b), maxLogBodyLength)
 }
 
 const (
@@ -166,12 +194,12 @@ const (
 )
 
 func sanitizeLogPayload(raw []byte, contentType string) string {
-	if len(raw) == 0 {
-		return ""
-	}
 	contentType = strings.ToLower(contentType)
 	if strings.Contains(contentType, "multipart/form-data") {
 		return "[multipart body omitted]"
+	}
+	if len(raw) == 0 {
+		return ""
 	}
 	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
 		values, err := url.ParseQuery(string(raw))
@@ -183,6 +211,7 @@ func sanitizeLogPayload(raw []byte, contentType string) string {
 			}
 			return truncateString(values.Encode(), maxLogBodyLength)
 		}
+		return "[form body omitted: invalid or truncated]"
 	}
 
 	var body any
@@ -192,6 +221,9 @@ func sanitizeLogPayload(raw []byte, contentType string) string {
 		if err == nil {
 			return truncateString(string(sanitized), maxLogBodyLength)
 		}
+	}
+	if strings.Contains(contentType, "json") {
+		return "[json body omitted: invalid or truncated]"
 	}
 	return truncateString(string(raw), maxLogBodyLength)
 }
