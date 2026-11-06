@@ -79,7 +79,7 @@ type teeReadCloser struct {
 // handle 是实际的中间件逻辑。
 func (m *sysLogMiddleware) handle(c *gin.Context) {
 	// 仅记录业务请求，跳过浏览器预检。
-	if c.Request.Method == http.MethodOptions {
+	if c.Request.Method == http.MethodOptions || strings.HasPrefix(c.Request.URL.Path, "/api/novex/") {
 		c.Next()
 		return
 	}

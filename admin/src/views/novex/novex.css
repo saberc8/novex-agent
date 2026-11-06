@@ -1,0 +1,205 @@
+/* Reuse the RBAC shell's Arco theme. Only workspace layout belongs here. */
+.novex-console {
+  min-width: 0;
+  color: var(--color-text-2);
+}
+.nx-workspace {
+  min-height: 100%;
+}
+.nx-page-header,
+.nx-section-heading,
+.nx-resource-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.nx-page-header {
+  margin-bottom: 12px;
+}
+.nx-page-header h2 {
+  margin: 0;
+  color: var(--color-text-1);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.nx-content {
+  min-width: 0;
+}
+.nx-alert {
+  margin-bottom: 16px;
+}
+.nx-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.nx-stats :deep(.arco-card-body) {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+.nx-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 20px;
+}
+.nx-section-heading {
+  margin-bottom: 20px;
+}
+.nx-section-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text-1);
+  line-height: 1.5;
+}
+.nx-section-heading p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--color-text-3);
+  line-height: 1.6;
+}
+.nx-secondary {
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+.nx-block {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.nx-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
+}
+.nx-resource-location {
+  margin: 0 0 16px;
+  color: var(--color-text-3);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.nx-resource-fields {
+  margin-top: 16px;
+}
+.nx-resource-footer {
+  border-top: 1px solid var(--color-border-2);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.nx-subsection {
+  margin-top: 24px;
+}
+.nx-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.nx-host-grid {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+}
+.nx-filter-grid {
+  grid-template-columns: 1.4fr 1fr 1.4fr 0.8fr;
+}
+.nx-source-select {
+  width: 100%;
+}
+.nx-source-select :deep(.arco-space-item:first-child) {
+  flex: 1;
+  min-width: 0;
+}
+.nx-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-2);
+}
+.nx-audit-detail,
+.nx-pre {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--color-text-2);
+}
+.nx-pre {
+  margin: 0;
+}
+.nx-document-text {
+  max-height: 65vh;
+  overflow: auto;
+  padding: 16px;
+  background: var(--color-fill-1);
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--border-radius-small);
+}
+.nx-chat-frame {
+  display: block;
+  width: 100%;
+  height: calc(100vh - 300px);
+  min-height: 500px;
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--border-radius-small);
+  background: var(--color-bg-1);
+}
+.nx-file-input {
+  width: 100%;
+  color: var(--color-text-2);
+  font: inherit;
+}
+.nx-file-input::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius-small);
+  background: var(--color-secondary);
+  color: var(--color-text-2);
+  font: inherit;
+  cursor: pointer;
+}
+:global(.novex-modal) {
+  max-width: calc(100vw - 32px);
+}
+@media (max-width: 1100px) {
+  .nx-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .nx-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 768px) {
+  .nx-page-header,
+  .nx-section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .nx-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .nx-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .nx-chat-frame {
+    min-height: 440px;
+  }
+}
+
+.nx-source-scan {
+  margin-bottom: 20px;
+}
+
+.nx-page-description {
+  margin: 0 0 20px;
+  color: var(--color-text-3);
+  line-height: 1.6;
+}

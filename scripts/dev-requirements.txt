@@ -1,0 +1,2 @@
+-r document-requirements.txt
+psycopg[binary]==3.3.5

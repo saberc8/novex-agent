@@ -7,7 +7,7 @@ Thumbs.db
 *.swo
 
 # Node / 前端
-node_modules/
+node_modules
 dist/
 build/
 .cache/
@@ -55,3 +55,9 @@ logs/
 .env.development.local
 .env.test.local
 .env.production.local
+
+.local/
+
+backend/data/
+
+agent-worker/.runtime/

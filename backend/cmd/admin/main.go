@@ -25,6 +25,7 @@ import (
 	persistence "voc-go-backend/internal/infrastructure/persistence/user"
 	"voc-go-backend/internal/infrastructure/security"
 	httpif "voc-go-backend/internal/interfaces/http"
+	"voc-go-backend/internal/novex"
 )
 
 // @title voc-go-backend 接口文档
@@ -149,6 +150,14 @@ func main() {
 	clientProtected := r.Group("")
 	clientProtected.Use(httpif.RequireClientAuth(pg, tokenSvc))
 	clientAuthHandler.RegisterProtectedClientRoutes(clientProtected)
+
+	// Novex owns authenticated routes and run-scoped MCP before the legacy route allowlist.
+	novexServer, err := novex.New(pg, tokenSvc)
+	if err != nil {
+		log.Fatalf("failed to initialize Novex: %v", err)
+	}
+	novexServer.Register(r)
+	r.Use(novexServer.LegacyGovernanceGuard())
 
 	// 受保护接口统一认证与 RBAC 授权。
 	r.Use(httpif.RequireRBAC(pg, tokenSvc, httpif.DefaultRoutePermissions()))

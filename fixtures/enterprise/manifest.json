@@ -1,0 +1,1027 @@
+{
+  "version": "2026-11-06",
+  "synthetic": true,
+  "tenant": "SC001",
+  "rowGrain": "Catalog: one SKU per quote_month, 2500 SKUs x 20 months",
+  "source": "Deterministic fixture generation; current anchor prices match scale database",
+  "workbooks": [
+    {
+      "path": "hardware-catalog-50000.xlsx",
+      "title": "SC001 五金历史报价目录 50000行",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sheets": {
+        "Catalog": {
+          "rows": 50000,
+          "columns": 9
+        },
+        "AfterSales": {
+          "rows": 8,
+          "columns": 6
+        }
+      },
+      "oracle": {
+        "latestMonth": "2026-11",
+        "sampleSku": "HW-002499",
+        "latestPrice": 888.25,
+        "previousMonthPrice": 888.15,
+        "latestExcelRow": 50000,
+        "previousExcelRow": 47500
+      },
+      "sha256": "8d9ae43090c15338cc3cca6b8c930c7423640d0beb51a71a434f0f7c85d7e1e3"
+    },
+    {
+      "path": "hardware-procurement-private.xlsx",
+      "title": "SC001 采购私有报价与供应商条款",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sheets": {
+        "Procurement": {
+          "rows": 24,
+          "columns": 8
+        },
+        "SupplierTerms": {
+          "rows": 4,
+          "columns": 4
+        }
+      },
+      "oracle": {
+        "sku": "HW-000001",
+        "basePrice": 38,
+        "quantity": 120,
+        "vatRate": 0.13,
+        "taxedUnit": 42.94,
+        "lineTotal": 5152.8,
+        "formulaCells": [
+          "Procurement!F2",
+          "Procurement!G2"
+        ]
+      },
+      "sha256": "232fcef5113944e9ea3dd994371c97c66c300f7b670f0373f2adf96a1b380632"
+    }
+  ],
+  "documents": [
+    {
+      "path": "md/KB-HR-001.md",
+      "title": "KB-HR-001 工资发放日",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "9d6fba143015741a7d5a5838a829c498032f34c19adbdcb1de99c0979c11da37",
+      "oracle": {
+        "question": "我10月工资什么时候发？",
+        "answer": "按本制度通常在11月10日发放，金额必须实时查询工资系统。"
+      }
+    },
+    {
+      "path": "md/KB-HR-002.md",
+      "title": "KB-HR-002 工资核对窗口",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "dadee854b6e6bacba05362d31eacfe51e1eda66d3b7ef8a2bd0a4d5710581422",
+      "oracle": {
+        "question": "工资不对如何处理？",
+        "answer": "在到账后5个工作日内向HR提交核对单，禁止向无权限人员发送同事工资。"
+      }
+    },
+    {
+      "path": "md/KB-HR-003.md",
+      "title": "KB-HR-003 年假申请",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "057a422bf7adaa6a551f2842934be4ee0571fa031e1908fbabdd5d25458ef2db",
+      "oracle": {
+        "question": "入职满一年有多少年假？",
+        "answer": "公司年假额度为7天，申请需提前3个工作日，余额以HR系统为准。"
+      }
+    },
+    {
+      "path": "md/KB-HR-004.md",
+      "title": "KB-HR-004 报销申请时限",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "bb3f13918f6401bff4067d5221639f79e4b1031e74afcb822c2e220a197e761c",
+      "oracle": {
+        "question": "出差回来何时报销？",
+        "answer": "返程后15个自然日内提交票据与行程，不在本制度推定金额上限。"
+      }
+    },
+    {
+      "path": "md/KB-HR-005.md",
+      "title": "KB-HR-005 补签申请",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "d43f7e73dd9459bcf37f037d3f6add82815e8661254b111b95d6084e6393f263",
+      "oracle": {
+        "question": "忘记打卡怎么办？",
+        "answer": "2个工作日内提交补签说明，每月最多3次。"
+      }
+    },
+    {
+      "path": "md/KB-HR-006.md",
+      "title": "KB-HR-006 培训登记",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "23541f52ecc74b9eba6c65c478ac8714437d0f8a3145f6b1892024dfe4c4b42a",
+      "oracle": {
+        "question": "新员工培训期限？",
+        "answer": "入职后10个工作日内完成，培训记录保留24个月。"
+      }
+    },
+    {
+      "path": "md/KB-HR-007.md",
+      "title": "KB-HR-007 工牌补办",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "739e562381a7f98c313d25f4fe3d0e9f22c64e2cde1ad3214bbb3b4f4294f6d9",
+      "oracle": {
+        "question": "工牌丢了怎么办？",
+        "answer": "4小时内报备停用，审批后2个工作日领取新卡。"
+      }
+    },
+    {
+      "path": "md/KB-HR-008.md",
+      "title": "KB-HR-008 办公设备借用",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "b998083f12e7e39ddc0abbf784bde5684bb236ff75ab9e1b73c2776ae9c5d75c",
+      "oracle": {
+        "question": "能借电脑多久？",
+        "answer": "单次最长30天，延期须再次审批。"
+      }
+    },
+    {
+      "path": "md/KB-HR-009.md",
+      "title": "KB-HR-009 试用期资料",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "a4af527360e05f5444b161c628308ffe35c790c2af32c16bc0976afdcee6fae3",
+      "oracle": {
+        "question": "试用期到底多长？",
+        "answer": "个人试用期须查授权合同，本文件仅规定资料补齐3个工作日。"
+      }
+    },
+    {
+      "path": "md/KB-HR-010.md",
+      "title": "KB-HR-010 离职交接",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "1c2597082123f16c012e1043f61a02bc53a0dd9c5f98d8a35ab0b5a140252f06",
+      "oracle": {
+        "question": "离职交接查什么？",
+        "answer": "核对资产、账号、项目、费用四类事项，不据此承诺离职审批日期。"
+      }
+    },
+    {
+      "path": "md/KB-HR-011.md",
+      "title": "KB-HR-011 加班记录",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "7ecfdc9fc71de83fe45db43d4966671f7e220f736589b3e9ed7efc8c3de78171",
+      "oracle": {
+        "question": "加班记录何时确认？",
+        "answer": "次月3日前确认，不能仅凭聊天声明计算加班费。"
+      }
+    },
+    {
+      "path": "md/KB-HR-012.md",
+      "title": "KB-HR-012 个人信息更正",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "7dfa5f827d1b6951178fe9efc3097635d6b4d9a990eacb5c836ae12a88f7a515",
+      "oracle": {
+        "question": "联系方式错误怎么改？",
+        "answer": "提交本人更正申请，HR在2个工作日内核验。"
+      }
+    },
+    {
+      "path": "md/KB-HR-013.md",
+      "title": "KB-HR-013 会议室预约",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "89113a1e1df03c008ca0e07374300bbc9a7fcde955d113d76a4c95ae934426bc",
+      "oracle": {
+        "question": "会议室没到场会怎样？",
+        "answer": "开始15分钟无人使用可释放，单次最长4小时。"
+      }
+    },
+    {
+      "path": "md/KB-HR-014.md",
+      "title": "KB-HR-014 访客登记",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "3d67e5d7c3eb453cca299784b470546eb224eb2b41e1ca73c121e35ec7dc8dbd",
+      "oracle": {
+        "question": "访客证有效多久？",
+        "answer": "默认当日有效，申请需提前1个工作日。"
+      }
+    },
+    {
+      "path": "md/KB-HR-015.md",
+      "title": "KB-HR-015 账号离岗停用",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "d1825dc16b408f71c7a143ad3c35ec0b229d07bbb737aaeda153ad7e44477c12",
+      "oracle": {
+        "question": "离职员工还能看工资吗？",
+        "answer": "需依据停用状态与合法保留访问流程，不能沿用旧会话绕过权限。"
+      }
+    },
+    {
+      "path": "md/KB-HR-016.md",
+      "title": "KB-HR-016 敏感薪资沟通",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "1f6ffdde3a96efda7f068b5b934f0b6aa1a41a105295c3c2ff99c20a09d30d86",
+      "oracle": {
+        "question": "经理能看所有奖金吗？",
+        "answer": "不能；奖金和银行卡必须另有字段授权，前端和聊天都执行相同策略。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-001.md",
+      "title": "KB-WMS-001 可用库存计算",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "71697c1c8b85999d1336bdf29fcb60115af265b2f756565c8453fb22aecb181b",
+      "oracle": {
+        "question": "如何算能发多少？",
+        "answer": "实时查询账面库存与预留数再相减，不能用历史文档代替库存。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-002.md",
+      "title": "KB-WMS-002 当日发货截单",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "bf4213d03ca8c1e2f2a004b1f75f80e70638558a264d63f359d718aef36536ac",
+      "oracle": {
+        "question": "15点下单一定今天发吗？",
+        "answer": "还必须完成审核、付款核验和库存分配；仅下单时间不足以承诺发货。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-003.md",
+      "title": "KB-WMS-003 缺货订单处理",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "a9fcac6181d278aafa63c77501b195473034780d195ac46f7aa2c982c41f26a3",
+      "oracle": {
+        "question": "库存不够怎么处理？",
+        "answer": "计算缺口并征求拆单同意，补货日期只使用已确认采购数据。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-004.md",
+      "title": "KB-WMS-004 仓库授权",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "4fb1cf370d4ffe38df003445cb30c4f59c0cb496a5d61fa6b2eb5160998fb25a",
+      "oracle": {
+        "question": "能查深圳所有库存吗？",
+        "answer": "只有身份映射授予的仓库可查，不得通过总量差值推断其他仓库。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-005.md",
+      "title": "KB-WMS-005 收货复核",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "9849313eeff5d5ff7f10c33f0b1ea8d23ad674a0ea224a952933657a5c6dced0",
+      "oracle": {
+        "question": "收货差异何时报？",
+        "answer": "发现后2小时内登记SKU、数量与图片证据。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-006.md",
+      "title": "KB-WMS-006 上架要求",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "dea7b25435aad3819cbfabb5d2cdb6574fef275e4b56d38658ab0a59663e33e0",
+      "oracle": {
+        "question": "待检品可以卖吗？",
+        "answer": "不可以，未通过质检的批次不得计入可售库存。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-007.md",
+      "title": "KB-WMS-007 拣货复核",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "e3e2f7583de1f6282297043c18e7ac3fef2062b89607519d6452b0b974f5f675",
+      "oracle": {
+        "question": "扫码不符能直接发吗？",
+        "answer": "不能；应退回异常队列复核。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-008.md",
+      "title": "KB-WMS-008 盘点差异",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "94d0327847b75e6c4c27d7a9964886e07e2de94026418e664e7d88f8880a4249",
+      "oracle": {
+        "question": "盘亏怎么处理？",
+        "answer": "达到5件或500元需双人复核，以核准调整单变更库存。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-009.md",
+      "title": "KB-WMS-009 预留超时",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "41e8285bc91cad516fbb679c5c92c2894f6d79a1bceb9232f9b90034b89a01a2",
+      "oracle": {
+        "question": "预留多久释放？",
+        "answer": "默认2小时，须检查订单类型与已审批续留记录。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-010.md",
+      "title": "KB-WMS-010 调拨确认",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "d1ae642f394d93366a9099a1f5391bf5754a71e750659364ae858bf19e6025e4",
+      "oracle": {
+        "question": "在途算现货吗？",
+        "answer": "不算；接收确认后才更新可用库存。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-011.md",
+      "title": "KB-WMS-011 发货包装",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "3ad681053f606187e978e6df6af4e4644fd6a9ada34e38e941868faf76a07de3",
+      "oracle": {
+        "question": "轴承怎么包装？",
+        "answer": "防锈袋加缓冲材料，保留追溯标签并注明SKU和件数。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-012.md",
+      "title": "KB-WMS-012 物流签收差异",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "aab06ce12e556813f5ea677af4eb09d46ba59156706d9c21b8ba001b4f686b42",
+      "oracle": {
+        "question": "签收少件怎么办？",
+        "answer": "48小时内登记并提交外箱、运单及数量证据。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-013.md",
+      "title": "KB-WMS-013 出库追溯",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "404c4f3594d07ba042e5b17bdf3fe96b2b7ad0d2e998a3116e9cdad58d2a833b",
+      "oracle": {
+        "question": "客服说发了就算发货吗？",
+        "answer": "应核对有效出库记录和运单，聊天描述不能替代。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-014.md",
+      "title": "KB-WMS-014 退货入库",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "f88d5afe13a42cda60601f2819d2a0eb754052f2bd89afd9a27e6093f1ada669",
+      "oracle": {
+        "question": "退货到了库存何时加？",
+        "answer": "先1个工作日内登记，质检合格后再转可售。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-015.md",
+      "title": "KB-WMS-015 危险品隔离",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "f34a7b0cbc17cebcc25445420f670a80f49e7b424370399ac2d5e126c29777b9",
+      "oracle": {
+        "question": "未知液体能普通快递发吗？",
+        "answer": "不能，先隔离确认，不能套用普通五金发货规则。"
+      }
+    },
+    {
+      "path": "md/KB-WMS-016.md",
+      "title": "KB-WMS-016 库存更新时间",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "9681a12825354b27d4f1760545b77ab727f6d82c6579a38ee18998524a5b384f",
+      "oracle": {
+        "question": "刚才说有货现在还能保证吗？",
+        "answer": "需要重新查询并以订单预留成功结果为准。"
+      }
+    },
+    {
+      "path": "md/KB-AS-001.md",
+      "title": "KB-AS-001 标准保修",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "4b38aa57380362b6f03cbfb601378644743727fa392cb29a3eda17cf675ebc8f",
+      "oracle": {
+        "question": "HW-000002保修多久？",
+        "answer": "工业轴承6204-2RS标准保修12个月，需核对有效签收日期和缺陷证据。"
+      }
+    },
+    {
+      "path": "md/KB-AS-002.md",
+      "title": "KB-AS-002 退货期限",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "97a2b9aa90cb3753297a14feddd0ebc5a9e8a4b5c9ee70837eb68d04934a4986",
+      "oracle": {
+        "question": "签收10天质量问题可申请吗？",
+        "answer": "仍在15天申请窗口内，需核验缺陷与商品状态后受理。"
+      }
+    },
+    {
+      "path": "md/KB-AS-003.md",
+      "title": "KB-AS-003 质量证据",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "e97e444406d6579e49b7df78ced464e07d67bc76acf4fd0ea362790825d53256",
+      "oracle": {
+        "question": "申请保修要什么？",
+        "answer": "提供订单号、SKU、问题描述和现场照片。"
+      }
+    },
+    {
+      "path": "md/KB-AS-004.md",
+      "title": "KB-AS-004 初次响应",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "bd44c1c95d6cfb0d2a718cf5552ae3ac6b1cd9d0057756aad795b24cb99ddfec",
+      "oracle": {
+        "question": "多久能修好？",
+        "answer": "本条只承诺4小时首次响应，维修完成时间需依据检测。"
+      }
+    },
+    {
+      "path": "md/KB-AS-005.md",
+      "title": "KB-AS-005 检测时限",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "10cce3a6cc054eeef4bc48c30b319ca91e93a885521691fb916ab190c3c0f02d",
+      "oracle": {
+        "question": "寄到后多久检测？",
+        "answer": "通常2个工作日给出初步结果，复杂故障另行说明。"
+      }
+    },
+    {
+      "path": "md/KB-AS-006.md",
+      "title": "KB-AS-006 非质量退换",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "6f9e4823bf6fa4989039904c9abcf40276ba3525c3ad320cd37775aea79da9b0",
+      "oracle": {
+        "question": "不喜欢能退吗？",
+        "answer": "先核验商品状态与审批条件，不能只凭偏好承诺无条件退款。"
+      }
+    },
+    {
+      "path": "md/KB-AS-007.md",
+      "title": "KB-AS-007 质量退回运费",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "a60481834496b2445b7d6a3369b011e7aef5f413d52433e8798d0403eedce838",
+      "oracle": {
+        "question": "质量退货谁付运费？",
+        "answer": "确认质量缺陷且获授权后由企业承担约定标准费用。"
+      }
+    },
+    {
+      "path": "md/KB-AS-008.md",
+      "title": "KB-AS-008 退款到账",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "950d748f402267692eb347d60eb58ce88ce71b97ec0e393c2243e46c240e7a07",
+      "oracle": {
+        "question": "退货后当天到账吗？",
+        "answer": "不保证；完成验收与审核后3个工作日内发起退款。"
+      }
+    },
+    {
+      "path": "md/KB-AS-009.md",
+      "title": "KB-AS-009 换货型号",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "eef15c5319b780addb4291dd533babf1eb4bbbd1f31f37f296aac70a30079080",
+      "oracle": {
+        "question": "轴承没货换别的可以吗？",
+        "answer": "必须客户明确同意并核对规格，不能自行替换。"
+      }
+    },
+    {
+      "path": "md/KB-AS-010.md",
+      "title": "KB-AS-010 易损件范围",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "0913b26d1b6d44ece186f60a8393e9df8c9d1058ac4759895776ba67c2eb4998",
+      "oracle": {
+        "question": "过载损坏保修吗？",
+        "answer": "不能直接承诺，按检测认定是否为质量缺陷。"
+      }
+    },
+    {
+      "path": "md/KB-AS-011.md",
+      "title": "KB-AS-011 售后进度",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "6a46e989ad44cfb277d59fda7b7e10425dd67b9ce9c1b770a96ca0c076170bf8",
+      "oracle": {
+        "question": "帮我标记已退款？",
+        "answer": "需要有权限的业务动作与财务结果，查询不能改变状态。"
+      }
+    },
+    {
+      "path": "md/KB-AS-012.md",
+      "title": "KB-AS-012 缺件补发",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "79479637b4c483cf167f3f748c4181233bbef77e5f02b570472d1e1864839300",
+      "oracle": {
+        "question": "少一件直接补两件？",
+        "answer": "按确认短少数量补发，补发单关联原订单。"
+      }
+    },
+    {
+      "path": "md/KB-AS-013.md",
+      "title": "KB-AS-013 收件地址更改",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "2c65bf75c09fae146c3bacd52f5d766fd287cef5f7674f1cf433bc2615035f03",
+      "oracle": {
+        "question": "能改发给新地址吗？",
+        "answer": "先验证原订单联系人，已出库须等待物流确认。"
+      }
+    },
+    {
+      "path": "md/KB-AS-014.md",
+      "title": "KB-AS-014 维修后保修",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "b78dd8f476f7166474893647eb6cfef7a9b488247e11f657591faa4fae31ca60",
+      "oracle": {
+        "question": "维修后重新保12个月吗？",
+        "answer": "不能一概而论，核对具体更换部件和工单承诺。"
+      }
+    },
+    {
+      "path": "md/KB-AS-015.md",
+      "title": "KB-AS-015 服务升级",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "c3c7c7d943446db75486524df9b6c7ad7546095033d555a18dcdba3f99c675f4",
+      "oracle": {
+        "question": "投诉后赔多少钱？",
+        "answer": "需审批后的方案，本制度只提供连续2次未解决的升级条件。"
+      }
+    },
+    {
+      "path": "md/KB-AS-016.md",
+      "title": "KB-AS-016 未知产品咨询",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "b1e303254a785c383815343904e1e64f1ddedc3ae2fb4b943a6e7cf31dd46f9e",
+      "oracle": {
+        "question": "未知型号下月上市吗？",
+        "answer": "没有可靠证据时回复无法确认，不用近似型号代替。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-001.md",
+      "title": "KB-PRODUCT-001 螺栓识别",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "5227bf73ffcf292595d8e485c06552233a3a686356318047cfa506931de67ec5",
+      "oracle": {
+        "question": "M8×30是什么SKU？",
+        "answer": "HW-000001，不得把历史报价直接当作当前成交价。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-002.md",
+      "title": "KB-PRODUCT-002 轴承识别",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "e03498a5a4e5150d28acae598f201f623e77b3c5bc112860d48c22044ff82f63",
+      "oracle": {
+        "question": "6204-2RS对应哪个商品？",
+        "answer": "HW-000002，替代方案需核验规格。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-003.md",
+      "title": "KB-PRODUCT-003 扭矩扳手识别",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "889a17baba3bdebe680de0aa844652529d79479824ebf906adbf80b4b205ddeb",
+      "oracle": {
+        "question": "扭矩最大多少？",
+        "answer": "此文件没有最大扭矩参数，须查有效技术规格书。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-004.md",
+      "title": "KB-PRODUCT-004 SKU精确匹配",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "03e0653d100fd305f447db83fdbad67d3678cc508c0df360003b5ea9c85f8256",
+      "oracle": {
+        "question": "HW-1等于HW-000001吗？",
+        "answer": "需确认标准SKU后查询，不自行合并不一致标识。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-005.md",
+      "title": "KB-PRODUCT-005 报价月份选择",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "93cd18cf2d1240db3ea5ee42a0ec73474fa5c77aa5bb5e07ee0c25b2466742e3",
+      "oracle": {
+        "question": "为什么同SKU有多行？",
+        "answer": "不同quote_month表示不同月度报价，查询应明确月份。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-006.md",
+      "title": "KB-PRODUCT-006 历史报价有效期",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "8a142e0c73407cfeed4a0f1d2a848ef18976ce4f6efff123b1835eee61faf680",
+      "oracle": {
+        "question": "去年价格还能用吗？",
+        "answer": "只能作为历史查询结果，当前成交需查现行报价与审批。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-007.md",
+      "title": "KB-PRODUCT-007 计价币种",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "06442874d7618b1d66fc7072f10fcc7624fdaf9348971f9363542e7474e35fca",
+      "oracle": {
+        "question": "表里68是什么币种？",
+        "answer": "人民币元；具体是否含税看字段说明和业务单据。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-008.md",
+      "title": "KB-PRODUCT-008 目录税口径",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "a1841172f9c33dd82e0302e736662ed5b4fa9479523a3dfdf55908dcdca6e5ae",
+      "oracle": {
+        "question": "采购38和销售68能直接算毛利吗？",
+        "answer": "先统一税口径与其他成本后再计算，本目录不提供完整毛利口径。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-009.md",
+      "title": "KB-PRODUCT-009 停产替代",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "0893a495051059764f299ecc417645c67e6361c96e06d8538df9acd6463182d1",
+      "oracle": {
+        "question": "某产品停产可用什么替代？",
+        "answer": "没有审核清单时不能凭相似名称直接推荐。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-010.md",
+      "title": "KB-PRODUCT-010 规格单位",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "576793a4e896ab7de48c3327e3909c78820237ef820f2318d48d73fc62a338a2",
+      "oracle": {
+        "question": "30是厘米吗？",
+        "answer": "M8×30中的长度标记按毫米，不能自行改成厘米。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-011.md",
+      "title": "KB-PRODUCT-011 批次追溯",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "6927211095f5e26e15223ed23afbe606970a445329d08e17998123e929b65163",
+      "oracle": {
+        "question": "知道SKU能知道生产日期吗？",
+        "answer": "还需批次或有效出入库记录，不能从SKU数字推断。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-012.md",
+      "title": "KB-PRODUCT-012 产品图片用途",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "95b41fcd82117ff8d81e23c48b6d9000e08ba0513f806924ba7d9ee37a1fc970",
+      "oracle": {
+        "question": "图片看着一样能确认通用吗？",
+        "answer": "不能，应查询正式参数和适配记录。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-013.md",
+      "title": "KB-PRODUCT-013 参数缺失处理",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "3a98f4224b46393395aec691b2717ac6d98c9d86e77a4f39680ce192fd3590d9",
+      "oracle": {
+        "question": "没显示库存是不是0？",
+        "answer": "不一定，要区分真实零、数据缺失与权限不可见。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-014.md",
+      "title": "KB-PRODUCT-014 报价审批",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "920be178f2c0c62abefebfe9fc4640d8737c16218dad75eb4e2e199c883d2f80",
+      "oracle": {
+        "question": "帮我打八折？",
+        "answer": "需有效报价审批，不能仅凭对话修改价格。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-015.md",
+      "title": "KB-PRODUCT-015 产品目录版本",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "552a15cedfb2f1454a88beb393faf1bdc881342a98f60a6b6363d8ff757e5624",
+      "oracle": {
+        "question": "这些是真客户数据吗？",
+        "answer": "不是，均为合成企业测试资料。"
+      }
+    },
+    {
+      "path": "md/KB-PRODUCT-016.md",
+      "title": "KB-PRODUCT-016 检索引用",
+      "scope": "tenant",
+      "owner": "scale_admin",
+      "tenant": "SC001",
+      "sha256": "e32e230fc3c22f8edf636f4422c8d272c3089392d61aed6ee6317e14d4a05e44",
+      "oracle": {
+        "question": "报价来源怎么标？",
+        "answer": "保留文件名、Catalog工作表以及对应记录行，不能只写网上查到。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-001.md",
+      "title": "KB-PROC-001 采购价格保密",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "e3cb151e5b17c43ff1b11f20df01fef35f70862cde05a596a869765cbb52960f",
+      "oracle": {
+        "question": "员工能看采购底价吗？",
+        "answer": "不能，必须有独立授权。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-002.md",
+      "title": "KB-PROC-002 采购税额",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "36634e4dba354887b92068f8cc2304a4a268f4576097d1dcb2f70c0a7fc6c2f8",
+      "oracle": {
+        "question": "税额怎么算？",
+        "answer": "使用表中vat_rate，先算含税单价再按数量计算。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-003.md",
+      "title": "KB-PROC-003 螺栓采购批量",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "204e9633e9efd0c6da516527759975ba58de12b0cdd21803d9b1ffe08c8ef2b1",
+      "oracle": {
+        "question": "120包螺栓含税金额？",
+        "answer": "5152.80元，须引用私有采购表并验证访问权限。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-004.md",
+      "title": "KB-PROC-004 轴承采购批量",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "4c3671b13d70f36126c56244dae66f7b8dd823da4106845179a0f197e05dda4e",
+      "oracle": {
+        "question": "200件轴承含税金额？",
+        "answer": "3616元，仅限授权采购资料使用。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-005.md",
+      "title": "KB-PROC-005 扳手采购批量",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "92e7d622969a325f03c577da6f003f315964f64d887b603452806d222475ffc6",
+      "oracle": {
+        "question": "5件扳手含税金额？",
+        "answer": "2938元，基于本批次报价。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-006.md",
+      "title": "KB-PROC-006 供应商报价期限",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "aa18db64b0e2f5e071b68fcd000ea593ae967b8d2d669b6b3cdbbd5b733ac502",
+      "oracle": {
+        "question": "报价多久有效？",
+        "answer": "默认30天，有valid_until则用该日期。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-007.md",
+      "title": "KB-PROC-007 对公付款账期",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "b24dbd14bb571346436454269a3033bc4824fe964f0c54c85ddcf9a946c90b51",
+      "oracle": {
+        "question": "验收就能马上付款吗？",
+        "answer": "仍需对账与批准，按30天账期执行。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-008.md",
+      "title": "KB-PROC-008 采购单变更",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "927422ea6a021cd7dcc5be034e9da14c2d4ce49c9cca26517406d4edf7fd8879",
+      "oracle": {
+        "question": "能直接改原采购价吗？",
+        "answer": "不能，应创建变更记录并审批。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-009.md",
+      "title": "KB-PROC-009 供应商准入",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "e27f5dacbda58e14a4706406e2932f92fc0f6b29ac17a739fbcf136d93cf3364",
+      "oracle": {
+        "question": "新供应商怎么启用？",
+        "answer": "三项核验通过后按批准流程启用。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-010.md",
+      "title": "KB-PROC-010 最小采购量",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "86512a13ffd224dce485e594a4808c8b71b665332abfbe7e7faed64c1e22f762",
+      "oracle": {
+        "question": "最少买几件？",
+        "answer": "查有效报价条款；未列明则明确待确认。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-011.md",
+      "title": "KB-PROC-011 采购交期",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "b52adbd09fe8a7f6ca437b6c40651668cc05375644e7777424cdee0f6d8ec804",
+      "oracle": {
+        "question": "今天缺货明天一定到吗？",
+        "answer": "没有已确认交期不能保证。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-012.md",
+      "title": "KB-PROC-012 紧急采购",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "cdcfd26861d27fdf2d27c6a761e3bc226a7f12498a0f84505c11b53718c243c9",
+      "oracle": {
+        "question": "急单可以不审批吗？",
+        "answer": "不可以，四项记录与批准仍必需。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-013.md",
+      "title": "KB-PROC-013 供应商质保",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "4a9589c3173cab9ae98d5f5c888f0b4b7184dbe7416790549f4418d06e8737fc",
+      "oracle": {
+        "question": "客户能看供应商赔付价吗？",
+        "answer": "不随售后查询权限开放。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-014.md",
+      "title": "KB-PROC-014 采购对账",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "6c92992b1bd1e6f83c0110dbb605aea73f653e58cd9ffc6abefb903ffb5aadbd",
+      "oracle": {
+        "question": "发票比收货多怎么办？",
+        "answer": "暂停差异部分并核对三单。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-015.md",
+      "title": "KB-PROC-015 价格异常复核",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "51242e00fe4b8c8d1fa95fda640798966aece3a911ef1c5bdbbf698375464ca9",
+      "oracle": {
+        "question": "涨价15%能直接下单吗？",
+        "answer": "超过10%阈值，须人工复核。"
+      }
+    },
+    {
+      "path": "md/KB-PROC-016.md",
+      "title": "KB-PROC-016 机密资料撤权",
+      "scope": "self",
+      "owner": "scale_c",
+      "tenant": "SC001",
+      "sha256": "dd49edf5fdae25370fc194b4a951ead6aad9c640d4c01dea1c8aa69f570d8bef",
+      "oracle": {
+        "question": "权限取消后旧聊天还能接着查吗？",
+        "answer": "不能，旧会话需锁定或重新建立授权上下文。"
+      }
+    }
+  ]
+}

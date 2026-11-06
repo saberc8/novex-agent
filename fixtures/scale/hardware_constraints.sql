@@ -1,0 +1,11 @@
+ALTER TABLE products ADD CONSTRAINT products_company_fk FOREIGN KEY(tenant_id) REFERENCES companies(tenant_id) NOT VALID;
+ALTER TABLE warehouses ADD CONSTRAINT warehouses_company_fk FOREIGN KEY(tenant_id) REFERENCES companies(tenant_id) NOT VALID;
+ALTER TABLE locations ADD CONSTRAINT locations_warehouse_fk FOREIGN KEY(tenant_id,warehouse_id) REFERENCES warehouses(tenant_id,warehouse_id) NOT VALID;
+ALTER TABLE inventory ADD CONSTRAINT inventory_product_fk FOREIGN KEY(tenant_id,sku) REFERENCES products(tenant_id,sku) NOT VALID;
+ALTER TABLE inventory ADD CONSTRAINT inventory_location_fk FOREIGN KEY(tenant_id,warehouse_id,location_id) REFERENCES locations(tenant_id,warehouse_id,location_id) NOT VALID;
+ALTER TABLE orders ADD CONSTRAINT orders_warehouse_fk FOREIGN KEY(tenant_id,warehouse_id) REFERENCES warehouses(tenant_id,warehouse_id) NOT VALID;
+ALTER TABLE order_items ADD CONSTRAINT items_order_fk FOREIGN KEY(tenant_id,order_id) REFERENCES orders(tenant_id,order_id) NOT VALID;
+ALTER TABLE order_items ADD CONSTRAINT items_product_fk FOREIGN KEY(tenant_id,sku) REFERENCES products(tenant_id,sku) NOT VALID;
+ALTER TABLE stock_movements ADD CONSTRAINT movements_line_fk FOREIGN KEY(tenant_id,order_id,line_no) REFERENCES order_items(tenant_id,order_id,line_no) NOT VALID;
+ALTER TABLE stock_movements ADD CONSTRAINT movements_location_fk FOREIGN KEY(tenant_id,warehouse_id,location_id) REFERENCES locations(tenant_id,warehouse_id,location_id) NOT VALID;
+ALTER TABLE after_sales ADD CONSTRAINT service_line_fk FOREIGN KEY(tenant_id,order_id,line_no) REFERENCES order_items(tenant_id,order_id,line_no) NOT VALID;

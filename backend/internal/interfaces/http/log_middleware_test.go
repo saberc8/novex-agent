@@ -90,3 +90,23 @@ func TestSysLogMiddlewareDoesNotLeakSecretsFromTruncatedJSON(t *testing.T) {
 		t.Fatalf("unexpected request body: %s", repo.record.RequestBody)
 	}
 }
+
+func TestNovexNeverCopiesSensitivePayloadsToLegacySyslog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, path := range []string{"/api/novex/query", "/api/novex/mcp", "/api/novex/runs/abc/events", "/api/novex/embed-exchange"} {
+		repo := &captureSysLogRepo{}
+		r := gin.New()
+		r.Use(NewSysLogMiddleware(repo, nil))
+		r.POST(path, func(c *gin.Context) { c.String(200, "salary=66000; private-document; session-ticket") })
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"password":"secret","content":"salary query"}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		r.ServeHTTP(resp, req)
+		if resp.Code != 200 || !strings.Contains(resp.Body.String(), "salary=66000") {
+			t.Fatalf("response changed for %s", path)
+		}
+		if repo.record != nil {
+			t.Fatalf("Novex sensitive request copied into legacy syslog: %s", path)
+		}
+	}
+}

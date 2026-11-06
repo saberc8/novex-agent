@@ -1,8 +1,10 @@
 {
   "name": "continew-admin-ui",
+  "description": "ContiNew Admin UI 3.7.0 with Novex Agent management integrations; modified by Novex Agent contributors in 2026.",
   "type": "module",
   "version": "3.7.0",
   "private": "true",
+  "packageManager": "pnpm@8.15.9",
   "scripts": {
     "bootstrap": "pnpm install --registry=https://registry.npmmirror.com",
     "dev": "vite --host",

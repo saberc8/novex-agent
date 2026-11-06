@@ -1,0 +1,16 @@
+Novex Agent
+Copyright 2026 saberc8 and Novex Agent contributors.
+
+Novex Agent is based on saberc8/template-rbac-go, imported from
+saberc8/avalon-template-ex. The original template snapshot is preserved in
+the Git history. The Novex Agent project is distributed under Apache-2.0.
+
+The admin frontend is derived from ContiNew Admin UI 3.7.0:
+https://github.com/continew-org/continew-admin-ui/tree/v3.7.0
+Copyright (c) 2022-present Charles7c Authors. All Rights Reserved.
+Its original Apache-2.0 license is preserved in admin/LICENSE.
+Novex changes add the business/knowledge management pages and API bindings,
+development scripts, and same-origin production endpoint configuration.
+
+Third-party packages retain their own licenses. See THIRD_PARTY_NOTICES.md
+and the package manifests/lockfiles; this project does not relicense them.
